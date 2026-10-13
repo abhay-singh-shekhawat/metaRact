@@ -1,7 +1,7 @@
 # Digital Services Studio — Phase 1 (Lead-generation MVP)
 
 Polished public website + project-enquiry workflow + minimal admin triage,
-implemented per `digital_services_agency_final_architecture.md` (DSS-ARCH-001 v2.0).
+implemented per `docs/architecture.md` (DSS-ARCH-001 v2.0).
 
 ## Stack
 
@@ -93,4 +93,4 @@ Local admin sign-in: `/admin/sign-in` with `ADMIN_DEV_EMAIL` + `ADMIN_DEV_PASSWO
 ## Docs
 
 - `SECURITY.md` — reporting, rotation, revocation, incidents, deletion, backups.
-- `digital_services_agency_final_architecture.md` — source of truth.
+- `docs/architecture.md` — source of truth.

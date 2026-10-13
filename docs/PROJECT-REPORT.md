@@ -1,6 +1,6 @@
 # Digital Services Studio — Complete Project Report
 
-**Spec:** `digital_services_agency_final_architecture.md` (DSS-ARCH-001 v2.0)
+**Spec:** `docs/architecture.md` (DSS-ARCH-001 v2.0)
 **Status:** IMPLEMENTED WITH KNOWN LIMITATIONS (all Phase-1 scope built, verified locally; live third-party integrations await operator credentials)
 **Codebase:** ~78 source files, ~4,500 lines TS/TSX + 3 SQL migrations + docs
 **Live preview:** http://localhost:3000 (`pnpm dev --port 3000`)
