@@ -6,10 +6,11 @@ implemented per `docs/architecture.md` (DSS-ARCH-001 v2.0).
 ## Stack
 
 Next.js 15 App Router + TypeScript (strict) + Tailwind CSS v4 + Zod.
-Supabase Auth/PostgreSQL for production; file-backed store (`.data/studio.json`)
-for local development and tests when Supabase env is absent.
-Resend adapter (log-only fallback in dev), Cloudflare Turnstile (fail-closed in
-production, bypass in dev), Upstash Redis rate limiting (in-memory fallback in dev).
+MongoDB Atlas for production; file-backed store (`.data/studio.json`)
+for local development and tests when `MONGODB_URI` is absent.
+Gmail SMTP via Nodemailer (log-only fallback in dev), Cloudflare Turnstile
+(fail-closed in production, bypass in dev), Upstash Redis rate limiting
+(in-memory fallback in dev).
 
 > No invented business facts: studio name/contact default to placeholders,
 > portfolio shows only approved entries (one labelled concept), policies are
@@ -33,6 +34,27 @@ pnpm dev        # http://localhost:3000
 Local admin sign-in: `/admin/sign-in` with `ADMIN_DEV_EMAIL` + `ADMIN_DEV_PASSWORD`
 (defaults `founder@example.com` / `change-me-in-env-local` — change in `.env.local`).
 
+## MongoDB Atlas setup
+
+1. Create a cluster and database user, allow-list your deployment IPs.
+2. Set `MONGODB_URI` (full connection string) and `MONGODB_DB_NAME` in
+   `.env.local` / hosting secrets. Collections and indexes are created
+   automatically on first use (`ensureIndexes`).
+3. Bootstrap the first admin (see below), then set
+   `ADMIN_BOOTSTRAP_ALLOWED=false`.
+
+## Gmail SMTP setup
+
+1. On the studio Gmail account, enable 2-Step Verification, then create an
+   App Password (Google Account → Security → App passwords).
+2. Set `GMAIL_USER` (the Gmail address), `GMAIL_APP_PASSWORD` (the 16-char
+   app password, no spaces), `EMAIL_FROM`, and `INTERNAL_NOTIFICATION_EMAIL`.
+3. Without Gmail credentials the app uses the log-only adapter (marked sent,
+   logged server-side) so the enquiry flow stays testable.
+4. Troubleshoot: `auth_failed` means the app password is wrong/revoked;
+   `transient_failure` means a network/timeout issue — the enquiry is still
+   saved and the notification can be retried from the admin panel.
+
 ## Commands
 
 | Command | Purpose |
@@ -49,35 +71,37 @@ Local admin sign-in: `/admin/sign-in` with `ADMIN_DEV_EMAIL` + `ADMIN_DEV_PASSWO
 
 ## Admin bootstrap (production)
 
-1. Invite/create the founder user in the Supabase dashboard (email verified).
-2. Run the operator script (never a web endpoint):
-   ```bash
-   SUPABASE_SERVICE_ROLE_KEY=... NEXT_PUBLIC_SUPABASE_URL=... \
-     pnpm tsx scripts/bootstrap-admin.ts founder@studio.com owner
-   ```
-3. Revoke: set `is_active=false` in `admin_memberships` and revoke the user's
-   Supabase session in the dashboard.
+Run the operator script (never a web endpoint):
+
+```bash
+MONGODB_URI=... MONGODB_DB_NAME=... \
+  pnpm tsx scripts/bootstrap-admin.ts founder@studio.com 'a-strong-password-12+-chars' owner
+```
+
+Revoke: set `isActive=false` on the user in the `admin_users` collection and
+delete their rows in `admin_sessions` (or wait for the 12h TTL expiry).
 
 ## Deployment & launch blockers
 
-- Apply `supabase/migrations/0001_phase1_schema.sql` to a dedicated production
-  project; review RLS/policies table-by-table.
-- Configure verified sender domain (`EMAIL_FROM`), monitored `INTERNAL_NOTIFICATION_EMAIL`,
+- Point `MONGODB_URI` at a dedicated production cluster; verify collections
+  and indexes; enable provider backups.
+- Configure Gmail App Password (`GMAIL_USER`, `GMAIL_APP_PASSWORD`),
+  verified `EMAIL_FROM`, monitored `INTERNAL_NOTIFICATION_EMAIL`,
   Turnstile keys, Upstash Redis, canonical `NEXT_PUBLIC_SITE_URL` (https).
 - `ADMIN_BOOTSTRAP_ALLOWED=false` in production runtime.
 - Approve brand name, contact email, services, portfolio entries, and all four
-  policy pages; invite/verify founder accounts; complete backup test-restore.
+  policy pages; bootstrap founder accounts; complete backup test-restore.
 - Run `pnpm check:production-config` — it must pass before launch.
 
 ## Known limitations
 
-- Local dev uses the file store; Supabase RLS/RPC paths are implemented in SQL
-  (`supabase/migrations`) and the app's Supabase branch but require a live project
-  to verify end-to-end (documented as unverified without credentials).
-- Email without `RESEND_API_KEY` uses the log-only adapter (marked sent, logged
-  server-side) so the enquiry flow stays testable.
-- `ADMIN_DEV_*` fallback auth is development-only; production enforces Supabase
-  Auth + `admin_memberships` when Supabase env is present.
+- Local dev uses the file store when `MONGODB_URI` is absent; the MongoDB
+  paths require a live Atlas cluster to verify end-to-end (documented as
+  unverified without credentials).
+- Email without Gmail credentials uses the log-only adapter (marked sent,
+  logged server-side) so the enquiry flow stays testable.
+- `ADMIN_DEV_*` fallback auth is development-only; production enforces
+  MongoDB-backed admin users + sessions when `MONGODB_URI` is present.
 
 ## Notes
 

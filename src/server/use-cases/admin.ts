@@ -1,5 +1,6 @@
 import { randomUUID } from "crypto";
 import { readStore, writeStore } from "@/server/db";
+import { isMongoConfigured } from "@/lib/mongodb/client";
 import {
   isValidTransition,
   type EnquiryStatus,
@@ -17,6 +18,10 @@ export interface ListParams {
 }
 
 export async function listEnquiriesUseCase(params: ListParams) {
+  if (isMongoConfigured()) {
+    const { listEnquiriesMongo } = await import("@/server/mongo-store");
+    return listEnquiriesMongo(params);
+  }
   const store = await readStore();
   let rows = [...store.enquiries].sort((a, b) =>
     b.createdAt.localeCompare(a.createdAt)
@@ -47,6 +52,10 @@ export async function listEnquiriesUseCase(params: ListParams) {
 }
 
 export async function getEnquiryUseCase(id: string) {
+  if (isMongoConfigured()) {
+    const { getEnquiryMongo } = await import("@/server/mongo-store");
+    return getEnquiryMongo(id);
+  }
   const store = await readStore();
   const enquiry = store.enquiries.find((e) => e.id === id);
   if (!enquiry) return null;
@@ -70,6 +79,10 @@ export async function changeStatusUseCase(
   reason: string,
   admin: AdminIdentity
 ) {
+  if (isMongoConfigured()) {
+    const { changeStatusMongo } = await import("@/server/mongo-store");
+    return changeStatusMongo(id, newStatus, reason, admin);
+  }
   const store = await readStore();
   const enquiry = store.enquiries.find((e) => e.id === id);
   if (!enquiry) return { ok: false as const, status: 404, error: "Not found." };
@@ -114,6 +127,10 @@ export async function assignUseCase(
   assignedTo: string | null,
   admin: AdminIdentity
 ) {
+  if (isMongoConfigured()) {
+    const { assignMongo } = await import("@/server/mongo-store");
+    return assignMongo(id, assignedTo, admin);
+  }
   const store = await readStore();
   const enquiry = store.enquiries.find((e) => e.id === id);
   if (!enquiry) return { ok: false as const, status: 404, error: "Not found." };
@@ -142,6 +159,10 @@ export async function addNoteUseCase(
   body: string,
   admin: AdminIdentity
 ) {
+  if (isMongoConfigured()) {
+    const { addNoteMongo } = await import("@/server/mongo-store");
+    return addNoteMongo(id, body, admin);
+  }
   const trimmed = body.trim();
   if (trimmed.length < 1 || trimmed.length > 5000) {
     return {
@@ -182,6 +203,55 @@ export async function retryNotificationUseCase(
   _admin: AdminIdentity
 ) {
   void _admin;
+  if (isMongoConfigured()) {
+    const {
+      peekNotificationMongo,
+      claimNotificationMongo,
+      completeOutboxJobMongo,
+    } = await import("@/server/mongo-store");
+    const peeked = await peekNotificationMongo(notificationId);
+    if (!peeked) return { ok: false as const, status: 404, error: "Not found." };
+    if (peeked.status !== "failed") {
+      return {
+        ok: false as const,
+        status: 409,
+        error: "Only failed notifications can be retried.",
+      };
+    }
+    if (peeked.attemptCount >= 5) {
+      return {
+        ok: false as const,
+        status: 429,
+        error: "Retry limit reached for this notification.",
+      };
+    }
+    const claimed = await claimNotificationMongo(notificationId);
+    if (!claimed) {
+      return {
+        ok: false as const,
+        status: 409,
+        error: "Only failed notifications can be retried.",
+      };
+    }
+    const result = await sendEmail({
+      to: claimed.recipient,
+      subject:
+        claimed.notificationType === "team_new_enquiry"
+          ? "New project enquiry (retry)"
+          : "We received your project enquiry (retry)",
+      html: "<p>Retry of a previous notification. See the admin panel for details.</p>",
+      type: claimed.notificationType,
+    });
+    await completeOutboxJobMongo(claimed.id, result);
+    const after = await peekNotificationMongo(notificationId);
+    return {
+      ok: true as const,
+      status: 200,
+      notificationStatus: (after?.status ?? (result.ok ? "sent" : "failed")) as
+        | "sent"
+        | "failed",
+    };
+  }
   const store = await readStore();
   const row = store.outbox.find((o) => o.id === notificationId);
   if (!row) return { ok: false as const, status: 404, error: "Not found." };

@@ -6,10 +6,7 @@ import type { NextRequest } from "next/server";
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   if (pathname.startsWith("/admin")) {
-    const hasSession =
-      req.cookies.has("studio_admin_session") ||
-      req.cookies.has("sb-access-token") ||
-      req.cookies.getAll().some((c) => c.name.startsWith("sb-"));
+    const hasSession = req.cookies.has("studio_admin_session");
     if (!hasSession && pathname !== "/admin/sign-in") {
       const url = req.nextUrl.clone();
       url.pathname = "/admin/sign-in";

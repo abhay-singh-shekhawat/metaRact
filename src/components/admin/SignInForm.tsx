@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
-import { createBrowserClient } from "@supabase/ssr";
 
 function useMounted(): boolean {
   // Gate submits on mount: a pre-hydration native submit would GET the form
@@ -14,7 +13,7 @@ function useMounted(): boolean {
   );
 }
 
-export function SignInForm({ devMode, supabaseMode }: { devMode: boolean; supabaseMode: boolean }) {
+export function SignInForm({ devNote }: { devNote: boolean }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -34,54 +33,26 @@ export function SignInForm({ devMode, supabaseMode }: { devMode: boolean; supaba
     const email = String(fd.get("email") || "");
     const password = String(fd.get("password") || "");
     try {
-      if (supabaseMode) {
-        const supabase = createBrowserClient(
-          process.env.NEXT_PUBLIC_SUPABASE_URL!,
-          process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!
-        );
-        const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
-        if (signInError) {
-          setError("Invalid credentials.");
-          return;
-        }
-        // Membership is enforced server-side; confirm before entering.
-        const me = await fetch("/api/admin/session");
-        if (!me.ok) {
-          await supabase.auth.signOut();
-          setError("No active team membership for this account.");
-          return;
-        }
-        router.push("/admin");
-      } else {
-        const res = await fetch("/api/admin/session", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email, password }),
-        });
-        if (res.ok) router.push("/admin");
-        else {
-          const d = await res.json().catch(() => ({}));
-          setError((d as { error?: string })?.error || "Sign-in failed. Check your credentials.");
-        }
+      const res = await fetch("/api/admin/session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+      if (res.ok) router.push("/admin");
+      else {
+        const d = await res.json().catch(() => ({}));
+        setError((d as { error?: string })?.error || "Sign-in failed. Check your credentials.");
       }
     } finally {
       setLoading(false);
     }
   }
 
-  if (!devMode && !supabaseMode) {
-    return (
-      <p role="note" className="rounded-[10px] bg-[#FFF8E1] p-3 text-[13.5px] text-[#6b4e00]">
-        Sign-in is not configured in this environment. Set Supabase credentials or enable the documented local operator flow.
-      </p>
-    );
-  }
-
   return (
     <form onSubmit={onSubmit} className="space-y-4">
-      {devMode && !supabaseMode && (
+      {devNote && (
         <p role="note" className="rounded-[10px] bg-[#FFF8E1] p-3 text-[13.5px] text-[#6b4e00]">
-          Development sign-in — use your local operator credentials. Production uses team single sign-on.
+          Development sign-in — use your local operator credentials.
         </p>
       )}
       {error && <p ref={alertRef} tabIndex={-1} role="alert" className="rounded-[10px] bg-[#FDECEA] p-3 text-[14px] font-medium text-[#7a1f18]">{error}</p>}

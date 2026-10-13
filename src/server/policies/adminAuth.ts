@@ -1,9 +1,12 @@
 import { getDevAdminEmail, isDevAuthAllowed } from "@/lib/auth/devSession";
+import { getMongoSessionAdmin } from "@/lib/auth/adminSession";
+import { isMongoConfigured } from "@/lib/mongodb/client";
 
-// Authorization boundary for Phase 1.
+// Authorization boundary.
 //
-// Production path: Supabase Auth + admin_memberships (see supabase/migrations).
-// Local/dev path (no Supabase credentials configured): signed dev-admin cookie
+// Production path: MongoDB-backed admin users + stateful sessions
+// (see src/lib/mongodb/collections.ts, src/lib/auth/adminSession.ts).
+// Local path (no MONGODB_URI configured): signed dev-admin cookie
 // issued by /api/admin/session after checking ADMIN_DEV_* env credentials.
 // Both paths expose the same { email, role } shape to use cases.
 export interface AdminIdentity {
@@ -14,42 +17,19 @@ export interface AdminIdentity {
 export async function requireAdmin(): Promise<
   { ok: true; admin: AdminIdentity } | { ok: false; status: number; error: string }
 > {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
-  if (supabaseUrl && supabaseKey) {
-    try {
-      const { createServerClient } = await import("@supabase/ssr");
-      const { cookies } = await import("next/headers");
-      const store = await cookies();
-      const supabase = createServerClient(supabaseUrl, supabaseKey, {
-        cookies: {
-          getAll: () => store.getAll(),
-          setAll: () => {},
-        },
-      });
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (user?.email) {
-        // Membership check via RLS-friendly query; service validation happens in RPC.
-        const { data } = await supabase
-          .from("admin_memberships")
-          .select("role,is_active")
-          .eq("user_id", user.id)
-          .maybeSingle();
-        const row = data as { role: string; is_active: boolean } | null;
-        if (row?.is_active && (row.role === "owner" || row.role === "member")) {
-          return {
-            ok: true,
-            admin: { email: user.email, role: row.role as "owner" | "member" },
-          };
-        }
-        return { ok: false, status: 403, error: "Admin membership required." };
-      }
-      // fall through to dev session when no supabase user
-    } catch {
-      // fall through to dev session
+  if (isMongoConfigured()) {
+    const sessionAdmin = await getMongoSessionAdmin();
+    if (sessionAdmin) {
+      return {
+        ok: true,
+        admin: { email: sessionAdmin.email, role: sessionAdmin.role },
+      };
     }
+    // Fall through to the dev session so local operators keep working in
+    // non-production environments before the first admin is bootstrapped.
+    const devEmail = isDevAuthAllowed() ? await getDevAdminEmail() : null;
+    if (devEmail) return { ok: true, admin: { email: devEmail, role: "owner" } };
+    return { ok: false, status: 401, error: "Authentication required." };
   }
   const email = isDevAuthAllowed() ? await getDevAdminEmail() : null;
   if (email) return { ok: true, admin: { email, role: "owner" } };

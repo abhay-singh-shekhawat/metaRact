@@ -18,10 +18,10 @@ export function isProductionConfigValid(): { ok: boolean; missing: string[] } {
   const missing: string[] = [];
   if (siteConfig.isPlaceholderName) missing.push("NEXT_PUBLIC_STUDIO_NAME");
   if (!process.env.NEXT_PUBLIC_SITE_URL?.startsWith("https://")) missing.push("NEXT_PUBLIC_SITE_URL (must be https)");
-  if (!process.env.NEXT_PUBLIC_SUPABASE_URL) missing.push("NEXT_PUBLIC_SUPABASE_URL");
-  if (!process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY) missing.push("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY");
-  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) missing.push("SUPABASE_SERVICE_ROLE_KEY");
-  if (!process.env.RESEND_API_KEY) missing.push("RESEND_API_KEY");
+  if (!process.env.MONGODB_URI) missing.push("MONGODB_URI");
+  if (!process.env.MONGODB_DB_NAME) missing.push("MONGODB_DB_NAME");
+  if (!process.env.GMAIL_USER) missing.push("GMAIL_USER");
+  if (!process.env.GMAIL_APP_PASSWORD) missing.push("GMAIL_APP_PASSWORD");
   if (!process.env.EMAIL_FROM) missing.push("EMAIL_FROM");
   if (!process.env.INTERNAL_NOTIFICATION_EMAIL) missing.push("INTERNAL_NOTIFICATION_EMAIL");
   if (!process.env.TURNSTILE_SECRET_KEY) missing.push("TURNSTILE_SECRET_KEY");

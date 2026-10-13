@@ -1,3 +1,5 @@
+import "server-only";
+
 export interface EmailResult {
   ok: boolean;
   messageId?: string;
@@ -5,7 +7,26 @@ export interface EmailResult {
 }
 
 function escapeText(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+export function htmlToText(html: string): string {
+  return html
+    .replace(/<\s*br\s*\/?>/gi, "\n")
+    .replace(/<\/\s*p\s*>/gi, "\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 export function customerReceiptHtml(ref: string, contactEmail: string): string {
@@ -21,15 +42,83 @@ export function teamAlertHtml(
   return `<p>New project enquiry <strong>${escapeText(ref)}</strong> — ${escapeText(serviceTitle)}</p><p>${escapeText(projectTitle)}</p><p>Review: ${escapeText(adminUrl)}</p>`;
 }
 
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+export function isGmailConfigured(): boolean {
+  return Boolean(
+    process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD && process.env.EMAIL_FROM
+  );
+}
+
+function configError(): string | null {
+  if (!process.env.GMAIL_USER) return "GMAIL_USER is not configured.";
+  if (!process.env.GMAIL_APP_PASSWORD) return "GMAIL_APP_PASSWORD is not configured.";
+  if (!process.env.EMAIL_FROM) return "EMAIL_FROM is not configured.";
+  if (!EMAIL_RE.test(process.env.EMAIL_FROM)) return "EMAIL_FROM is not a valid email address.";
+  return null;
+}
+
+type Transport = {
+  sendMail: (opts: {
+    from: string;
+    to: string;
+    subject: string;
+    html: string;
+    text: string;
+  }) => Promise<{ messageId?: string }>;
+  verify?: () => Promise<unknown>;
+};
+
+declare global {
+  var __gmailTransport: Transport | undefined;
+}
+
+async function getTransport(): Promise<Transport> {
+  if (!globalThis.__gmailTransport) {
+    const nodemailer = await import("nodemailer");
+    globalThis.__gmailTransport = nodemailer.createTransport({
+      host: "smtp.gmail.com",
+      port: 465,
+      secure: true,
+      auth: {
+        user: process.env.GMAIL_USER,
+        pass: process.env.GMAIL_APP_PASSWORD,
+      },
+      connectionTimeout: 10000,
+      greetingTimeout: 10000,
+      socketTimeout: 15000,
+    }) as unknown as Transport;
+  }
+  return globalThis.__gmailTransport!;
+}
+
+/** Test hook: replace the SMTP transport with a stub. Never used in production. */
+export function __setEmailTransportForTests(transport: Transport | undefined): void {
+  globalThis.__gmailTransport = transport;
+}
+
+function classifySmtpError(err: unknown): string {
+  const code = (err as { code?: string; responseCode?: number })?.code;
+  if (code === "EAUTH" || code === "EENVELOPE") return "auth_failed";
+  if (
+    code === "ETIMEDOUT" ||
+    code === "ESOCKET" ||
+    code === "ECONNECTION" ||
+    code === "EGREETING"
+  ) {
+    return "transient_failure";
+  }
+  return "provider_error";
+}
+
 export async function sendEmail(opts: {
   to: string;
   subject: string;
   html: string;
   type: string;
 }): Promise<EmailResult> {
-  const apiKey = process.env.RESEND_API_KEY;
-  const from = process.env.EMAIL_FROM;
-  if (!apiKey || !from) {
+  const misconfigured = configError();
+  if (misconfigured) {
     // Dev/test fallback: log-only adapter, marked sent so the enquiry flow
     // stays verifiable without credentials. Production preflight blocks launch.
     console.log(
@@ -37,21 +126,24 @@ export async function sendEmail(opts: {
     );
     return { ok: true, messageId: `log-${Date.now()}` };
   }
+  if (!EMAIL_RE.test(opts.to)) {
+    console.error(`[email] invalid recipient type=${opts.type}`);
+    return { ok: false, errorCode: "invalid_recipient" };
+  }
   try {
-    const { Resend } = await import("resend");
-    const resend = new Resend(apiKey);
-    const result = await resend.emails.send({
-      from,
+    const transport = await getTransport();
+    const info = await transport.sendMail({
+      from: process.env.EMAIL_FROM!,
       to: opts.to,
       subject: opts.subject,
       html: opts.html,
+      text: htmlToText(opts.html),
     });
-    if (result.error) {
-      console.error(`[email] provider error type=${opts.type}`);
-      return { ok: false, errorCode: "provider_rejected" };
-    }
-    return { ok: true, messageId: result.data?.id };
-  } catch {
-    return { ok: false, errorCode: "provider_error" };
+    // Accepted by Gmail for submission. Confirmed delivery is not observable
+    // here; downstream bounces are handled out of band.
+    return { ok: true, messageId: info?.messageId };
+  } catch (err) {
+    console.error(`[email] smtp error type=${opts.type}`);
+    return { ok: false, errorCode: classifySmtpError(err) };
   }
 }

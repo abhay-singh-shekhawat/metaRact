@@ -10,18 +10,21 @@ business days.
 ## Secrets
 
 - Never commit `.env.local` or real credentials. `.env.example` holds names only.
-- Server-only keys (`SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_DB_URL`,
-  `RESEND_API_KEY`, `TURNSTILE_SECRET_KEY`, `UPSTASH_REDIS_REST_TOKEN`) must
+- Server-only keys (`MONGODB_URI`, `GMAIL_APP_PASSWORD`,
+  `TURNSTILE_SECRET_KEY`, `UPSTASH_REDIS_REST_TOKEN`) must
   never use `NEXT_PUBLIC_` or appear in client bundles, logs or screenshots.
+- Gmail uses an App Password (2-Step Verification required), never the
+  regular account password. If App Passwords are unavailable, use OAuth 2.0
+  rather than weakening account security.
 - Rotate any exposed secret immediately in the provider dashboard and hosting
   secret manager, then invalidate old sessions/tokens.
 
 ## Access revocation
 
-- Admin: set `admin_memberships.is_active=false` for the user and revoke their
-  Supabase Auth session in the dashboard.
-- If a device is lost: rotate `ADMIN_SESSION_SECRET` (dev) / Supabase keys as
-  applicable and force re-login.
+- Admin: set `isActive=false` on the user in `admin_users` and delete their
+  rows in `admin_sessions` (sessions also expire after 12h via TTL).
+- If a device is lost: revoke that user's `admin_sessions` rows immediately;
+  rotate Gmail/Upstash keys as applicable and force re-login.
 
 ## Incident triage
 

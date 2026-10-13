@@ -1,13 +1,18 @@
 /**
- * Safe operator script: activate an admin membership for an existing,
- * verified Supabase Auth user. Not a web endpoint; never in the browser bundle.
- * Usage: SUPABASE_SERVICE_ROLE_KEY=... pnpm tsx scripts/bootstrap-admin.ts user@example.com owner
+ * Safe operator script: create or activate an admin user in MongoDB Atlas.
+ * Not a web endpoint; never in the browser bundle.
+ * Usage: MONGODB_URI=... MONGODB_DB_NAME=... pnpm tsx scripts/bootstrap-admin.ts user@example.com 'a-strong-password' [owner|member]
  */
 async function main() {
   const email = (process.argv[2] || "").trim().toLowerCase();
-  const role = (process.argv[3] || "owner").trim();
+  const password = process.argv[3] || "";
+  const role = (process.argv[4] || "owner").trim();
   if (!email || !email.includes("@")) {
-    console.error("Usage: bootstrap-admin.ts <email> [owner|member]");
+    console.error("Usage: bootstrap-admin.ts <email> <password> [owner|member]");
+    process.exit(1);
+  }
+  if (!password || password.length < 12) {
+    console.error("Password must be at least 12 characters.");
     process.exit(1);
   }
   if (role !== "owner" && role !== "member") {
@@ -17,42 +22,36 @@ async function main() {
   if (process.env.ADMIN_BOOTSTRAP_ALLOWED === "true") {
     console.warn("Note: ADMIN_BOOTSTRAP_ALLOWED=true — ensure this is an operator run, not web runtime.");
   }
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !serviceKey) {
-    console.error("Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY.");
+  if (!process.env.MONGODB_URI) {
+    console.error("Missing MONGODB_URI.");
     process.exit(1);
   }
-  const { createClient } = await import("@supabase/supabase-js");
-  const admin = createClient(url, serviceKey, {
-    auth: { autoRefreshToken: false, persistSession: false },
-  });
-  // Look up existing user by exact email
-  const { data, error } = await admin.auth.admin.listUsers();
-  if (error) {
-    console.error("Failed to list users:", error.message);
-    process.exit(1);
-  }
-  const user = data.users.find(
-    (u) => (u.email || "").toLowerCase() === email
+  const { getDb } = await import("../src/lib/mongodb/client");
+  const { COLLECTIONS, ensureIndexes } = await import("../src/lib/mongodb/collections");
+  const { hashPassword } = await import("../src/lib/auth/password");
+  const db = await getDb();
+  await ensureIndexes(db);
+  const passwordHash = await hashPassword(password);
+  const now = new Date().toISOString();
+  await db.collection(COLLECTIONS.adminUsers).updateOne(
+    { email },
+    {
+      $set: { role, isActive: true },
+      $setOnInsert: {
+        passwordHash,
+        createdAt: now,
+        createdBy: null,
+        lastLoginAt: null,
+      },
+    },
+    { upsert: true }
   );
-  if (!user) {
-    console.error(`No Supabase Auth user found for ${email}. Invite/create the user first, then rerun.`);
-    process.exit(1);
-  }
-  if (!user.email_confirmed_at) {
-    console.error(`User ${email} exists but email is not verified. Verify first, then rerun.`);
-    process.exit(1);
-  }
-  const { error: upsertError } = await admin.from("admin_memberships").upsert(
-    { user_id: user.id, role, is_active: true },
-    { onConflict: "user_id" }
-  );
-  if (upsertError) {
-    console.error("Membership upsert failed:", upsertError.message);
-    process.exit(1);
-  }
+  // Rotate the password hash on every bootstrap run so a re-run resets access.
+  await db
+    .collection(COLLECTIONS.adminUsers)
+    .updateOne({ email }, { $set: { passwordHash } });
   console.log(`OK: ${email} is now an active ${role}. (No credentials printed.)`);
+  process.exit(0);
 }
 
 main().catch((e) => {

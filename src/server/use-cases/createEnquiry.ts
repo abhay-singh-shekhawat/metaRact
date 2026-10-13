@@ -8,6 +8,7 @@ import {
   payloadFingerprint,
 } from "@/lib/security/fingerprint";
 import { readStore, writeStore, nextReference } from "@/server/db";
+import { isMongoConfigured } from "@/lib/mongodb/client";
 import { sendEmail, teamAlertHtml, customerReceiptHtml } from "@/lib/email/sender";
 import { siteConfig } from "@/config/site";
 import { getService } from "@/config/services";
@@ -104,6 +105,12 @@ export async function createEnquiryUseCase(input: CreateInput) {
   };
 
   const fingerprint = payloadFingerprint(normalized as unknown as Record<string, unknown>);
+
+  // MongoDB Atlas path (production). File-store path below is the local fallback.
+  if (isMongoConfigured()) {
+    return await createEnquiryMongoFlow(normalized, fingerprint);
+  }
+
   const store = await readStore();
 
   const existing = store.enquiries.find(
@@ -222,6 +229,93 @@ export async function createEnquiryUseCase(input: CreateInput) {
 
 function readOutboxFor(enquiryId: string, store: Awaited<ReturnType<typeof readStore>>) {
   return store.outbox.filter((o) => o.enquiryId === enquiryId);
+}
+
+/**
+ * MongoDB Atlas creation flow: same validation/normalization as above, then
+ * an idempotent Mongo insert (unique idempotency key) followed by best-effort
+ * notification delivery. Email failure never deletes the enquiry.
+ */
+async function createEnquiryMongoFlow(
+  normalized: {
+    serviceSlug: string;
+    projectTitle: string;
+    projectSummary: string;
+    name: string;
+    email: string;
+    emailNormalized: string;
+    companyOrOrganization: string;
+    phone: string;
+    preferredContactMethod: string;
+    budgetBand: string | null;
+    timelinePreference: string | null;
+    preferredDate: string | null;
+    referenceUrls: string[];
+    serviceDetails: Record<string, unknown>;
+    privacyNoticeVersion: string;
+    idempotencyKey: string;
+    sourcePath: string;
+    utmSource: string;
+    utmMedium: string;
+    utmCampaign: string;
+  },
+  fingerprint: string
+) {
+  const {
+    createEnquiryMongo,
+    readOutboxForMongo,
+    markOutboxProcessingMongo,
+    completeOutboxJobMongo,
+  } = await import("@/server/mongo-store");
+  const teamRecipient =
+    process.env.INTERNAL_NOTIFICATION_EMAIL || "team@example.com";
+  const created = await createEnquiryMongo(normalized, fingerprint, teamRecipient);
+  if (!created.ok) {
+    return {
+      ok: false as const,
+      status: 409,
+      code: "idempotency_conflict",
+      fieldErrors: {},
+    };
+  }
+  if (created.duplicate) {
+    return {
+      ok: true as const,
+      status: 200,
+      referenceNumber: created.referenceNumber,
+      duplicate: true,
+    };
+  }
+  const service = getService(normalized.serviceSlug);
+  const siteUrl = siteConfig.siteUrl;
+  const jobs = await readOutboxForMongo(created.enquiryId);
+  for (const job of jobs) {
+    const claimed = await markOutboxProcessingMongo(job.id);
+    if (!claimed) continue;
+    const isTeam = job.notificationType === "team_new_enquiry";
+    const result = await sendEmail({
+      to: job.recipient,
+      subject: isTeam
+        ? `New project enquiry — ${created.referenceNumber} — ${service?.title ?? normalized.serviceSlug}`
+        : `We received your project enquiry — ${created.referenceNumber}`,
+      html: isTeam
+        ? teamAlertHtml(
+            created.referenceNumber,
+            service?.title ?? normalized.serviceSlug,
+            normalized.projectTitle,
+            `${siteUrl}/admin/enquiries/${created.enquiryId}`
+          )
+        : customerReceiptHtml(created.referenceNumber, teamRecipient),
+      type: job.notificationType,
+    });
+    await completeOutboxJobMongo(job.id, result);
+  }
+  return {
+    ok: true as const,
+    status: 201,
+    referenceNumber: created.referenceNumber,
+    duplicate: false,
+  };
 }
 
 async function deliverJobs(

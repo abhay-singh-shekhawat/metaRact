@@ -1,12 +1,29 @@
+# Local data & build output
 .data/
 .next/
 out/
 node_modules/
-.env.local
-.env*.local
-*.log
-.DS_Store
 test-results/
 playwright-report/
-
 tsconfig.tsbuildinfo
+*.log
+.DS_Store
+
+# Environment & secrets — never commit real credentials.
+# (.env.example is the tracked template; everything below stays local.)
+.env
+.env.local
+.env*.local
+!.env.example
+
+# Certificates, keys & provider credential files
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+credentials*.json
+*-credentials.json
+service-account*.json
+secrets*.json
+.npmrc

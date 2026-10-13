@@ -3,7 +3,6 @@ import { createEnquiryUseCase } from "@/server/use-cases/createEnquiry";
 import { checkEnquiryRateLimit, rateLimitKey } from "@/lib/rate-limit/limiter";
 import { verifyTurnstile } from "@/lib/security/turnstile";
 import { enquiryRequestSchema } from "@/lib/validation/enquiry";
-import { isSupabaseConfigured, serviceClient } from "@/lib/supabase/server-privileged";
 import { siteConfig } from "@/config/site";
 import { logEvent } from "@/lib/observability/log";
 
@@ -83,8 +82,9 @@ export async function POST(req: Request) {
       return res;
     }
 
-    // Honeypot: pretend success without persisting. Applies to every
-    // persistence branch below (local use-case and Supabase RPC alike).
+    // Honeypot: pretend success without persisting. Applies to the
+    // persistence use-case below (MongoDB Atlas when configured,
+    // local file store otherwise).
     const bodyRecord = body as Record<string, unknown>;
     if (typeof bodyRecord.website === "string" && bodyRecord.website.trim() !== "") {
       return NextResponse.json(
@@ -121,10 +121,6 @@ export async function POST(req: Request) {
       );
     }
 
-    if (isSupabaseConfigured()) {
-      return await createViaSupabase(body, rid);
-    }
-
     const result = await createEnquiryUseCase({ body, ip: clientIp(req) });
     if (!result.ok) {
       if (result.status === 409) {
@@ -147,138 +143,4 @@ export async function POST(req: Request) {
     logEvent({ level: "error", route: "POST /api/public/enquiries", code: "UNHANDLED", requestId: rid });
     return errEnvelope("INTERNAL_ERROR", "Something went wrong. Your request was not confirmed — please retry.", rid, undefined, 500);
   }
-}
-
-/**
- * Production path: validated payload goes through the privileged
- * `create_public_enquiry` RPC (single transaction: enquiry + event + outbox).
- * Never reachable in local dev without Supabase credentials.
- */
-async function createViaSupabase(body: unknown, rid: string) {
-  const { validateServiceDetails, normalizeEmail } = await import("@/lib/validation/enquiry");
-  const { payloadFingerprint } = await import("@/lib/security/fingerprint");
-  const { getService } = await import("@/config/services");
-
-  const parsed = enquiryRequestSchema.safeParse(body);
-  if (!parsed.success) {
-    const fieldErrors: Record<string, string> = {};
-    for (const issue of parsed.error.issues) {
-      const k = String(issue.path[0] ?? "_form");
-      if (!fieldErrors[k]) fieldErrors[k] = issue.message;
-    }
-    return errEnvelope("VALIDATION_ERROR", "Please correct the highlighted fields.", rid, fieldErrors);
-  }
-  const d = parsed.data;
-  const sd = validateServiceDetails(d.serviceSlug, d.serviceDetails ?? {});
-  if (!sd.ok) return errEnvelope("VALIDATION_ERROR", "Please correct the highlighted fields.", rid, { serviceDetails: sd.error });
-  const svc = getService(d.serviceSlug);
-  if (!svc) {
-    return errEnvelope("VALIDATION_ERROR", "Please correct the highlighted fields.", rid, {
-      serviceSlug: "This service is not currently available.",
-    });
-  }
-
-  const emailNormalized = normalizeEmail(d.email);
-  const fingerprint = payloadFingerprint({
-    serviceSlug: d.serviceSlug,
-    projectTitle: d.projectTitle.trim(),
-    projectSummary: d.projectSummary.trim(),
-    name: d.name.trim(),
-    email: emailNormalized,
-    companyOrOrganization: (d.companyOrOrganization || "").trim(),
-    phone: (d.phone || "").trim(),
-    preferredContactMethod: d.preferredContactMethod,
-    budgetBand: d.budgetBand,
-    timelinePreference: d.timelinePreference,
-    preferredDate: d.preferredDate,
-    referenceUrls: d.referenceUrls || [],
-    serviceDetails: sd.cleaned,
-    privacyNoticeAcknowledged: true,
-  });
-
-  const teamRecipient = process.env.INTERNAL_NOTIFICATION_EMAIL || "";
-  if (!teamRecipient) {
-    logEvent({ level: "error", route: "POST /api/public/enquiries", code: "CONFIG_MISSING_TEAM_EMAIL", requestId: rid });
-    return errEnvelope("INTERNAL_ERROR", "Something went wrong. Your request was not confirmed — please retry.", rid, undefined, 500);
-  }
-
-  const svcClient = serviceClient();
-  const { data, error } = await svcClient.rpc("create_public_enquiry", {
-    payload: {
-      idempotency_key: d.idempotencyKey,
-      service_slug: d.serviceSlug,
-      project_title: d.projectTitle.trim(),
-      project_summary: d.projectSummary.trim(),
-      service_details: sd.cleaned,
-      name: d.name.trim(),
-      email: d.email.trim(),
-      company_or_organization: (d.companyOrOrganization || "").trim(),
-      phone: (d.phone || "").trim(),
-      preferred_contact_method: d.preferredContactMethod,
-      budget_band: d.budgetBand || "",
-      timeline_preference: d.timelinePreference || "",
-      preferred_date: d.preferredDate || "",
-      reference_urls: d.referenceUrls || [],
-      privacy_notice_version: d.privacyNoticeVersion || siteConfig.privacyNoticeVersion,
-      source_path: (d.sourcePath || "").slice(0, 500),
-      utm_source: (d.utmSource || "").slice(0, 200),
-      utm_medium: (d.utmMedium || "").slice(0, 200),
-      utm_campaign: (d.utmCampaign || "").slice(0, 200),
-    },
-    fingerprint,
-    team_recipient: teamRecipient,
-  });
-  if (error) {
-    const code = (error as { code?: string }).code;
-    if (code === "P0002") {
-      return errEnvelope(
-        "IDEMPOTENCY_KEY_REUSED",
-        "This submission was already used with different details. Please reload the form for a new enquiry.",
-        rid,
-        undefined,
-        409
-      );
-    }
-    logEvent({ level: "error", route: "POST /api/public/enquiries", code: "DB_ERROR", requestId: rid });
-    return errEnvelope("INTERNAL_ERROR", "Something went wrong. Your request was not confirmed — please retry.", rid, undefined, 500);
-  }
-  const row = data as { id: string; reference_number: string; is_duplicate: boolean };
-
-  // Best-effort notification via outbox claim; failure never deletes the enquiry.
-  if (!row.is_duplicate) {
-    try {
-      const { data: jobs } = await svcClient.from("notification_outbox").select("id,notification_type").eq("enquiry_id", row.id);
-      const { sendEmail, teamAlertHtml, customerReceiptHtml } = await import("@/lib/email/sender");
-      for (const job of jobs || []) {
-        const j = job as { id: string; notification_type: string };
-        const claimed = await svcClient.rpc("begin_notification_attempt", { p_id: j.id });
-        if (claimed.error) continue;
-        const isTeam = j.notification_type === "team_new_enquiry";
-        const res = await sendEmail({
-          to: isTeam ? teamRecipient : emailNormalized,
-          subject: isTeam
-            ? `New project enquiry — ${row.reference_number} — ${svc.title}`
-            : `We received your project enquiry — ${row.reference_number}`,
-          html: isTeam
-            ? teamAlertHtml(row.reference_number, svc.title, d.projectTitle.trim(), `${siteConfig.siteUrl}/admin/enquiries/${row.id}`)
-            : customerReceiptHtml(row.reference_number, process.env.EMAIL_FROM || ""),
-          type: j.notification_type,
-        });
-        await svcClient.rpc("complete_notification_attempt", {
-          p_id: j.id,
-          p_sent: res.ok,
-          p_message_id: res.ok ? res.messageId || null : null,
-          p_error: res.ok ? null : res.errorCode || "EMAIL_FAILED",
-        });
-      }
-    } catch {
-      /* notification failure must not fail the enquiry */
-    }
-  }
-
-  logEvent({ level: "info", route: "POST /api/public/enquiries", code: row.is_duplicate ? "DUPLICATE_REPLAY" : "CREATED", requestId: rid });
-  return NextResponse.json(
-    { data: { referenceNumber: row.reference_number, received: true }, requestId: rid },
-    { status: row.is_duplicate ? 200 : 201 }
-  );
 }

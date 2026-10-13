@@ -40,7 +40,7 @@ During coding:
 - Implement small, verifiable slices: scaffold/design tokens; public pages; enquiry form; database/migrations; admin authentication; admin workflow; hardening/tests.
 - Use migrations for every schema change. Never rely on an undocumented manual production database edit.
 - Add tests alongside each meaningful feature.
-- Keep secrets server-side. Never place service-role credentials or private environment variables in client components, logs, browser bundles, screenshots, or public repositories.
+- Keep secrets server-side. Never place database credentials or private environment variables in client components, logs, browser bundles, screenshots, or public repositories.
 
 Before reporting completion:
 
@@ -108,11 +108,11 @@ These defaults remove avoidable ambiguity. The founders may change them later th
 | Default currency | INR (`INR`, displayed as ₹) | Currency is metadata, not a promise of fixed pricing |
 | Business timezone | `Asia/Kolkata` | Store timestamps in UTC; display business times in this zone |
 | Website stack | Next.js App Router + TypeScript + Tailwind CSS | Single codebase and server-rendered public pages |
-| Data/auth | Supabase-managed PostgreSQL and Supabase Auth | Use private records and database-level access policies |
+| Data/auth | MongoDB Atlas and MongoDB-backed admin auth | Use private collections, unique indexes, and server-side authorization checks |
 | Architecture style | Modular monolith | One deployable app; no microservices in v1 |
 | Quote model | Manual, outside the public system in phase 1 | Avoid inaccurate automated prices before real delivery data exists |
 | Public project references | URL fields, no file upload in phase 1 | Reduces file-exposure and malware risk; upload requirements are specified later |
-| Email | Transactional email adapter; Resend is the default provider adapter | Provider must be configured with a verified sender domain before production |
+| Email | Transactional email via Gmail SMTP using Nodemailer | App Password in server secrets; verified sender before production |
 | Abuse protection | Server-verified Cloudflare Turnstile + Upstash rate limiting in production | Do not rely on browser-only checks or process-local memory for production rate limits |
 | Analytics | Minimal aggregate event analytics only; no session replay | Never send form contents, email, phone, internal notes, or attachment URLs to analytics |
 | Public pricing | Explain pricing method and external expenses; no unvalidated numeric guarantees | Actual quote follows scope review |
@@ -231,7 +231,7 @@ Only `enabled: true` services appear in navigation, sitemap, public service list
 
 | Route | Requirement |
 |---|---|
-| `/admin/sign-in` | Supabase-authenticated sign-in; no public account creation |
+| `/admin/sign-in` | Password-authenticated sign-in against MongoDB admin users; no public account creation |
 | `/admin` | Overview counts and recent enquiries |
 | `/admin/enquiries` | Filterable/paginated list |
 | `/admin/enquiries/[id]` | Detail, notes, timeline, assignment, status update |
@@ -423,11 +423,11 @@ Client-provided text has normal length limits and is always rendered as text. Li
 
 ### 7.1 Admin authentication
 
-- Use Supabase Auth with email-based login/magic link or OTP. No public sign-up route.
-- A founder account must be invited/created in the Supabase dashboard or through a privileged operator workflow; membership must then be explicitly added to `admin_memberships`.
-- For production, require MFA for founders if supported by the selected plan and deployment flow; at minimum, use verified email identity and strong account/session controls.
+- Use email + password login against `admin_users` in MongoDB Atlas with bcrypt password hashes. No public sign-up route.
+- A founder account must be created through the privileged operator bootstrap script (`scripts/bootstrap-admin.ts`), which stores only a strong password hash and activates membership with the selected role.
+- For production, require strong unique passwords (minimum 12 characters); at minimum, use verified email identity and strong account/session controls.
 - Do not authorize a user merely because their email domain matches the business or because the UI hides the admin route.
-- Use the official Supabase SSR/client pattern for the chosen Next.js version; refresh/auth cookies correctly and validate identity on the server. Never trust a client-supplied user ID or role.
+- Use stateful server-side sessions: cryptographically random session tokens, SHA-256 token hashes stored in `admin_sessions` with a TTL expiry, `HttpOnly` + `Secure` (production) + `SameSite=Lax` cookies, server-side revocation on logout. Validate identity on the server for every request. Never trust a client-supplied user ID or role.
 
 ### 7.2 Admin capabilities in Phase 1
 
@@ -474,7 +474,7 @@ Use a configurable internal target, default **two business days** for first huma
 
 ### 8.1 Selected architecture
 
-A single Next.js App Router application with server-side route handlers/use cases and a managed Supabase PostgreSQL database. Public content can be statically rendered or cached when safe; all admin data and enquiry mutations are dynamic and private. Keep the system modular, not distributed.
+A single Next.js App Router application with server-side route handlers/use cases and a managed MongoDB Atlas database. Public content can be statically rendered or cached when safe; all admin data and enquiry mutations are dynamic and private. Keep the system modular, not distributed.
 
 ### 8.2 Required stack
 
@@ -483,9 +483,9 @@ A single Next.js App Router application with server-side route handlers/use case
 - React version compatible with the selected Next.js release.
 - Tailwind CSS and an accessible component layer where useful.
 - Zod for server-side request schemas.
-- Supabase Auth + PostgreSQL; `@supabase/ssr` for server/browser session clients.
-- Supabase migration tooling/CLI for schema migrations.
-- Resend adapter for transactional emails, behind an internal provider interface.
+- MongoDB Atlas via the official `mongodb` Node.js driver; a single cached client (`src/lib/mongodb/client.ts`, `server-only`).
+- MongoDB collections + indexes created idempotently at runtime (`ensureIndexes`); no external migration CLI.
+- Nodemailer Gmail SMTP adapter for transactional emails, behind the internal `sendEmail` interface.
 - Cloudflare Turnstile server verification in production.
 - Upstash Redis with an official supported rate-limiter integration for production abuse limits; do not use in-memory-only rate limiting in production.
 - Vitest for unit/integration tests and Playwright for critical end-to-end tests, unless a compatible existing test stack already exists.
@@ -546,7 +546,9 @@ Before installing dependencies, verify current official docs and select patched 
 │   │   └── navigation.ts
 │   ├── lib/
 │   │   ├── auth/
-│   │   ├── supabase/
+│   │   ├── mongodb/
+│   │   │   ├── client.ts
+│   │   │   └── collections.ts
 │   │   ├── security/
 │   │   ├── email/
 │   │   ├── rate-limit/
@@ -555,18 +557,17 @@ Before installing dependencies, verify current official docs and select patched 
 │   │   └── observability/
 │   ├── server/
 │   │   ├── use-cases/
-│   │   ├── repositories/
+│   │   ├── mongo-store.ts
+│   │   ├── db.ts
 │   │   ├── policies/
 │   │   └── notifications/
 │   ├── types/
-│   └── styles/
-├── supabase/
-│   ├── migrations/
-│   └── seed.sql
+│   │   └── styles/
 ├── tests/
 │   ├── unit/
 │   ├── integration/
-│   └── e2e/
+│   ├── e2e/
+│   └── shims/
 ├── scripts/
 │   ├── check-production-config.ts
 │   └── bootstrap-admin.ts
@@ -579,7 +580,7 @@ Before installing dependencies, verify current official docs and select patched 
 └── SECURITY.md
 ```
 
-Adapt the structure to the existing repository if one exists. The structure is a responsibility map, not a reason to create empty directories or empty files. Use a server-only marker for modules that contain service-role access or secrets.
+Adapt the structure to the existing repository if one exists. The structure is a responsibility map, not a reason to create empty directories or empty files. Use a server-only marker for modules that contain database access or secrets.
 
 ### 8.4 Boundaries
 
@@ -597,177 +598,177 @@ Do not build generic frameworks or excessive abstraction. Add boundaries only wh
 
 ## 9. Database model — Phase 1
 
-All timestamps are stored as `timestamptz` in UTC. Use UUID primary keys unless a sequence is explicitly needed for the human-readable reference. Use named constraints, foreign keys, `NOT NULL` wherever required, indexes for listing/filtering, and server-controlled timestamps. Money is not stored in Phase 1 because the system does not issue quotes or take payments.
+All timestamps are stored as ISO-8601 UTC strings. Use MongoDB `ObjectId` primary keys (`_id`) unless a sequence is explicitly needed for the human-readable reference (a `counters` document provides the atomic sequence). Use unique indexes, application-level validation, `null` only where specified, indexes for listing/filtering, and server-controlled timestamps. Money is not stored in Phase 1 because the system does not issue quotes or take payments.
 
-### 9.1 `admin_memberships`
+### 9.1 `admin_users` and `admin_sessions`
 
 | Field | Type | Rules |
 |---|---|---|
-| `user_id` | `uuid` PK/FK → `auth.users.id` | One membership per auth identity |
-| `role` | text/enum | `owner` or `member` only |
-| `is_active` | boolean | Default true |
-| `created_at` | `timestamptz` | Server default `now()` |
-| `created_by` | `uuid` nullable | Membership operator where known |
+| `_id` | `ObjectId` PK | One document per admin identity |
+| `email` | string, unique index, lower-cased | One admin per email |
+| `passwordHash` | string | bcrypt hash only; never plaintext |
+| `role` | string | `owner` or `member` only |
+| `isActive` | boolean | Default true |
+| `createdAt` | ISO-8601 UTC string | Server default |
+| `createdBy` | string nullable | Membership operator where known |
+| `lastLoginAt` | ISO-8601 UTC string nullable | Updated on successful login |
 
-RLS: authenticated user may read only their own membership. Only an authorized owner/privileged bootstrap path may create, revoke or change membership. Do not allow a user to set their own role or `is_active`.
+`admin_sessions`: `{ tokenHash unique, adminUserId → admin_users._id, email, role, expiresAt (TTL index, 12h), createdAt, revokedAt }`. Only the SHA-256 hash of a session token is stored; the raw token lives only in the `HttpOnly` cookie.
+
+Authorization is enforced server-side on every request (`requireAdmin`): session lookup + active-membership check. No user can set their own role or `isActive`; membership changes happen only through the operator bootstrap script.
 
 ### 9.2 `enquiries`
 
 Required fields:
 
-- `id uuid primary key default gen_random_uuid()`.
-- `reference_number text not null unique`, generated server-side in a database-safe way such as a sequence-backed `REQ-YYYY-000001` reference; never accept from the client.
-- `idempotency_key uuid not null unique`.
-- `payload_fingerprint text not null` (SHA-256 over canonical allowed payload; never hash/log raw secrets as telemetry).
-- `service_slug text not null` and checked against the enabled service list in the server use case.
-- `status` enum/text constrained to the statuses in Section 7.4; default `new`.
-- `project_title text not null`.
-- `project_summary text not null`.
-- `service_details jsonb not null default '{}'::jsonb`; persist only validated, allowlisted keys.
-- `name text not null`, `email text not null`, `email_normalized text not null`.
-- `company_or_organization text null`, `phone text null`, `preferred_contact_method text not null default 'email'` with allowed values `email`, `whatsapp`.
-- `budget_band text null` constrained to Section 6.2 values.
-- `timeline_preference text null` constrained to Section 6.2 values.
-- `preferred_date date null`; validate according to selected timeline and treat only as customer preference.
-- `reference_urls jsonb not null default '[]'::jsonb`; server accepts a maximum of five validated strings.
-- `privacy_notice_version text not null` and `privacy_notice_acknowledged_at timestamptz not null`.
-- `assigned_to uuid null references auth.users(id)`; must be an active admin membership on assignment.
-- `decline_reason text null`, internal only.
-- `source_path text null`, `utm_source text null`, `utm_medium text null`, `utm_campaign text null`; collect only when supplied via allowed query parameters and never store arbitrary query strings.
-- `created_at timestamptz not null default now()`, `updated_at timestamptz not null default now()`.
-- `converted_at timestamptz null`, `archived_at timestamptz null`.
+- `_id ObjectId` primary key.
+- `referenceNumber` string, unique index, generated server-side via an atomic `counters` increment as `REQ-YYYY-000001`; never accept from the client.
+- `idempotencyKey` string, unique index.
+- `payloadFingerprint` string (SHA-256 over canonical allowed payload; never hash/log raw secrets as telemetry), indexed.
+- `serviceSlug` string and checked against the enabled service list in the server use case.
+- `status` string constrained to the statuses in Section 7.4; default `new`.
+- `projectTitle` string.
+- `projectSummary` string.
+- `serviceDetails` embedded document, default `{}`; persist only validated, allowlisted keys.
+- `name`, `email`, `emailNormalized` strings.
+- `companyOrOrganization`, `phone` strings (empty when unprovided), `preferredContactMethod` string with allowed values `email`, `whatsapp`.
+- `budgetBand` string nullable, constrained to Section 6.2 values.
+- `timelinePreference` string nullable, constrained to Section 6.2 values.
+- `preferredDate` string nullable; validate according to selected timeline and treat only as customer preference.
+- `referenceUrls` array of strings; server accepts a maximum of five validated strings.
+- `privacyNoticeVersion` string and `privacyNoticeAcknowledgedAt` ISO-8601 UTC string.
+- `assignedTo` string nullable (active admin email); must be an active admin on assignment.
+- `declineReason` string nullable, internal only.
+- `sourcePath`, `utmSource`, `utmMedium`, `utmCampaign` strings; collect only when supplied via allowed query parameters and never store arbitrary query strings.
+- `createdAt`/`updatedAt` ISO-8601 UTC strings.
+- `convertedAt`, `archivedAt` ISO-8601 UTC strings nullable.
 
 Database/validation rules:
 
-- Trim strings and enforce lengths in Zod and database constraints where appropriate.
-- `email_normalized` is lower-cased/normalized server-side and indexed. Do not treat email alone as proof of identity or deduplicate separate enquiries solely by email.
-- `idempotency_key` uniqueness handles request retry deduplication, not business-level duplicate leads.
-- Use a unique constraint/index for `reference_number` and `idempotency_key`.
-- Index `(created_at desc)`, `(status, created_at desc)`, `(service_slug, created_at desc)`, and `assigned_to` where justified.
-- Do not put a user-provided project summary into a dynamically executed SQL fragment or HTML string.
+- Trim strings and enforce lengths in Zod and application checks where appropriate.
+- `emailNormalized` is lower-cased/normalized server-side and indexed. Do not treat email alone as proof of identity or deduplicate separate enquiries solely by email.
+- `idempotencyKey` uniqueness handles request retry deduplication, not business-level duplicate leads.
+- Use unique indexes for `referenceNumber` and `idempotencyKey`.
+- Index `(createdAt desc)`, `(status, createdAt desc)`, `(serviceSlug, createdAt desc)`, and `assignedTo` where justified.
+- Do not put a user-provided project summary into an unsanitized HTML email string (escape before rendering).
 
 ### 9.3 `enquiry_events`
 
-- `id uuid primary key`.
-- `enquiry_id uuid not null references enquiries(id) on delete cascade`.
-- `actor_user_id uuid null references auth.users(id)`; null for a system event.
-- `event_type text not null`, constrained by the code-supported event types (e.g. `created`, `status_changed`, `assigned`, `unassigned`, `internal_note_added`, `notification_failed`, `notification_retried`, `archived`).
-- `from_status text null`, `to_status text null`.
-- `summary text not null` (short, redacted and not a duplicate of the full brief).
-- `metadata jsonb not null default '{}'::jsonb`, restricted to small allowlisted non-sensitive facts.
-- `created_at timestamptz not null default now()`.
+- `_id ObjectId` primary key.
+- `enquiryId ObjectId` referencing `enquiries._id` (application-level cascade on delete).
+- `actorUserId` string nullable (admin email); null for a system event.
+- `eventType` string, constrained by the code-supported event types (e.g. `created`, `status_changed`, `assigned`, `unassigned`, `internal_note_added`, `notification_failed`, `notification_retried`, `archived`).
+- `fromStatus`, `toStatus` strings nullable.
+- `summary` string (short, redacted and not a duplicate of the full brief).
+- `metadata` embedded document, default `{}`, restricted to small allowlisted non-sensitive facts.
+- `createdAt` ISO-8601 UTC string.
 
 Events are append-only through the application. Admin users cannot edit event history through a generic endpoint. Do not record secrets, full request bodies, tokens, or sensitive personal information in events.
 
 ### 9.4 `enquiry_internal_notes`
 
-- `id uuid primary key`.
-- `enquiry_id uuid not null references enquiries(id) on delete cascade`.
-- `author_user_id uuid not null references auth.users(id)`.
-- `body text not null` with length 1–5000 after trim.
-- `created_at timestamptz not null default now()`.
+- `_id ObjectId` primary key.
+- `enquiryId ObjectId` referencing `enquiries._id` (application-level cascade on delete).
+- `authorUserId` string (admin email).
+- `body` string with length 1–5000 after trim.
+- `createdAt` ISO-8601 UTC string.
 
 Internal notes are available only in the authorized admin area. Never include them in notification emails, public responses, or analytics. The notes table may be merged into `enquiry_events` only if separate access control and note querying remain equally clear; do not create two competing sources for the same note.
 
 ### 9.5 `notification_outbox`
 
-- `id uuid primary key`.
-- `enquiry_id uuid not null references enquiries(id) on delete cascade`.
-- `notification_type text not null` (initially `team_new_enquiry` and `customer_receipt`).
-- `recipient text not null`.
-- `status text not null` constrained to `pending`, `processing`, `sent`, `failed`.
-- `attempt_count int not null default 0 check (attempt_count >= 0)`.
-- `last_attempt_at timestamptz null`.
-- `sent_at timestamptz null`.
-- `provider_message_id text null`.
-- `last_error_code text null` (safe normalized code, not raw secrets or provider response payload).
-- `created_at timestamptz not null default now()`.
+- `_id ObjectId` primary key.
+- `enquiryId ObjectId` referencing `enquiries._id` (application-level cascade on delete).
+- `notificationType` string (initially `team_new_enquiry` and `customer_receipt`); unique compound index on `(enquiryId, notificationType)`.
+- `recipient` string.
+- `status` string constrained to `pending`, `processing`, `sent`, `failed`.
+- `attemptCount` number, default 0, never negative.
+- `lastAttemptAt` ISO-8601 UTC string nullable.
+- `sentAt` ISO-8601 UTC string nullable.
+- `providerMessageId` string nullable.
+- `lastErrorCode` string nullable (safe normalized code, not raw secrets or provider response payload).
+- `createdAt` ISO-8601 UTC string.
 
-Create the enquiry, initial event, and outbox records within one database transaction. A provider outage must not cause the request to be lost. Retrying a notification must not recreate an enquiry or send an unbounded email loop.
+Create the enquiry, initial event, and outbox records together in the creation flow (unique idempotency index makes retries safe without a distributed transaction). A provider outage must not cause the request to be lost. Retrying a notification must not recreate an enquiry or send an unbounded email loop.
 
 ### 9.6 Future entities — do not create until Phase 2
 
 Quotes, quote line items, projects, milestones, payment records, project file records, customer accounts, and client-facing project events are Phase 2/3. Their design is specified in Section 16. Do not add unused schema “just in case.”
 
-### 9.7 Database migrations and seeding
+### 9.7 Database setup and seeding
 
-- All schema is stored in versioned SQL migrations.
+- All collections and indexes are declared in code (`src/lib/mongodb/collections.ts`) and created idempotently at runtime.
 - Seeding is idempotent and limited to safe reference data; never seed fake users, fake testimonials, fake clients, or false project history.
-- Use local Supabase for development where feasible. Keep a distinct production project.
-- RLS must be enabled for every table exposed to the Supabase Data API. Default to no anonymous table access. Only the intended admin policies grant private access.
-- Public enquiry creation goes through the validated server endpoint and a server-only privileged write path or narrowly permissioned database function. Do not grant broad anonymous `INSERT` on the `enquiries`, `enquiry_events`, notes, membership or outbox tables.
-- Use least privilege. If a service-role credential is used by the server for the public submission flow, isolate its module using a server-only import, restrict the function surface, validate all input first, and never make the key available to browser code. Prefer the least-privileged supported database function/role that reliably enforces the same invariants.
-- Add database tests for constraints, allowed statuses, idempotency uniqueness, and RLS/authorization behaviour.
+- Use a local database/file store for development where feasible. Keep a distinct production Atlas cluster/project.
+- No anonymous database access: the connection string is server-only and every admin read/mutation re-checks session + active membership in the application. Do not depend on obscurity as the only protection.
+- Public enquiry creation goes through the validated server endpoint and the server-side Mongo store. There is no direct browser-to-database path.
+- Use least privilege. The Atlas database user used by the server should have only read/write on the application database (no admin/server roles). The connection string must never be available to browser code; isolate database modules with a `server-only` import.
+- Add tests for constraints (via unique indexes), allowed statuses, idempotency uniqueness, and authorization behaviour.
 
-### 9.8 Required database invariants and RPC contracts
+### 9.8 Required database invariants and server-enforced operations
 
-The implementation agent must translate these rules into actual versioned migrations, constraints, policies and SQL functions. Do not leave the policies as comments or implement only a UI-side check.
+The implementation agent must translate these rules into actual unique indexes, application checks, and server-side operations. Do not leave the policies as comments or implement only a UI-side check.
 
 **Required constraints and indexes**
 
-- Primary keys and foreign keys exactly as defined above.
-- Unique `enquiries.reference_number` and `enquiries.idempotency_key`.
-- A check that `reference_urls` is a JSON array and `service_details` is a JSON object.
-- Check constraints for status, role, notification state, budget band, timeline preference and contact preference.
-- Index enquiry creation time descending, `(status, created_at desc)`, `(service_slug, created_at desc)`, and `assigned_to`.
-- Foreign-key relationships must not allow orphan notes, events or notification records.
-- `updated_at` must be updated server-side for every enquiry mutation.
-- Generate a reference like `REQ-2026-000123` inside the database transaction using a sequence or another concurrency-safe mechanism. A client can never choose the reference. Gaps in a sequence are acceptable; duplicate references are not.
+- `ObjectId` primary keys; `enquiryId` references exactly as defined above.
+- Unique `enquiries.referenceNumber` and `enquiries.idempotencyKey`.
+- A check that `referenceUrls` is an array and `serviceDetails` is an object.
+- Application-level checks for status, role, notification state, budget band, timeline preference and contact preference.
+- Index enquiry creation time descending, `(status, createdAt desc)`, `(serviceSlug, createdAt desc)`, and `assignedTo`.
+- Application-level cascades must not leave orphan notes, events or notification records.
+- `updatedAt` must be updated server-side for every enquiry mutation.
+- Generate a reference like `REQ-2026-000123` via an atomic `counters` increment (`findOneAndUpdate` with `$inc` + `upsert`). A client can never choose the reference. Gaps in a sequence are acceptable; duplicate references are not (unique index).
 
-**RLS/policy matrix**
+**Authorization matrix (all enforced server-side in `requireAdmin` + use cases)**
 
-| Table | `anon` | Authenticated non-admin | Active admin |
+| Collection | Anonymous | Authenticated non-admin | Active admin |
 |---|---|---|---|
-| `admin_memberships` | no access | read own membership row only | read own membership row; never self-edit role |
-| `enquiries` | no direct access | no access | select permitted list/detail rows; direct writes denied |
-| `enquiry_events` | no access | no access | select event history; direct writes denied |
-| `enquiry_internal_notes` | no access | no access | select notes; direct writes denied |
-| `notification_outbox` | no access | no access | select delivery state; direct writes denied |
+| `admin_users` | no access | no access | read via session only; never self-edit role |
+| `enquiries` | no direct access | no access | select permitted list/detail rows; writes only through validated use cases |
+| `enquiry_events` | no access | no access | select event history; append-only through use cases |
+| `enquiry_internal_notes` | no access | no access | select notes; writes only through validated use cases |
+| `notification_outbox` | no access | no access | select delivery state; writes only through validated flows |
 
-Enable RLS on every table. Explicitly revoke anonymous table privileges. Do not depend on a missing policy or obscurity as the only protection. For reads, use the authenticated Supabase SSR client so RLS sees the actual user session. For writes, use only the named RPC paths below; avoid generic table update endpoints.
+There is no direct browser-to-database path: reads use the server session so authorization always sees the verified admin identity. All writes go through the named server operations below; there are no generic update endpoints.
 
-Create a hardened `public.is_active_admin()` helper or equivalent policy-safe mechanism to check that `auth.uid()` maps to an active membership. If implemented as `SECURITY DEFINER`, fix `search_path` to an empty or explicitly safe value, fully qualify all objects, revoke execute from `PUBLIC` as appropriate, and grant only the needed role. Avoid recursive RLS policies on the membership table.
+**Operation A: public enquiry creation (`createEnquiryMongo`)**
 
-**RPC contract A: `create_public_enquiry(payload jsonb, fingerprint text, team_recipient text)`**
+- Callable only from the validated server route after Turnstile, rate-limit, origin and Zod validation. The operation is not a replacement for API validation.
+- The application passes only the normalized, allowlisted, validated payload; it must omit the Turnstile token and all anti-bot metadata. `teamRecipient` comes from validated server configuration, never the public request.
+- The customer receipt recipient is the enquiry's normalized email; the team-alert recipient is `teamRecipient`. Reject an empty/invalid team recipient at the application configuration check.
+- Flow: check `idempotencyKey`; if an existing document has the same fingerprint, return its id and reference with `duplicate=true`; if the fingerprint differs, return a conflict; otherwise insert the enquiry, `created` event, and both initial notification outbox rows (duplicate-key errors on concurrent inserts resolve the same way), then return the new id/reference with `duplicate=false`.
+- Never accept `status`, `assignedTo`, `referenceNumber`, event actor, or notification status from the public payload as authoritative. Set those values server-side.
+- Notification sending happens outside the insert flow (best-effort); failure updates the outbox to `failed` and never deletes the enquiry.
 
-- Callable only by the server's privileged role; revoke execution from `anon`, `authenticated` and `PUBLIC`.
-- Must be `SECURITY DEFINER` only if needed to write private tables; use a fixed safe `search_path`, fully qualified references, and a minimal function body.
-- Caller has already performed Turnstile, rate-limit, origin and Zod validation. The function is not a replacement for API validation.
-- The application passes only the normalized, allowlisted, validated payload; it must omit the Turnstile token and all anti-bot metadata. `team_recipient` comes from validated server configuration, never the public request.
-- The customer receipt recipient is the enquiry's normalized email; the team-alert recipient is `team_recipient`. Reject an empty/invalid team recipient at the application configuration check.
-- In one transaction: check `idempotency_key`; if an existing row has the same fingerprint, return its `id` and `reference_number` with `is_duplicate=true`; if the fingerprint differs, raise a stable conflict condition; otherwise insert the enquiry, `created` event, and both initial notification outbox rows, then return the new ID/reference with `is_duplicate=false`.
-- Never accept `status`, `assigned_to`, `reference_number`, event actor, or notification status from the public payload as authoritative. Set those values in the function.
-- If any insert fails, roll back every insert in that transaction.
+**Operation B: admin status change (`changeStatusMongo`)**
 
-**RPC contract B: `admin_change_enquiry_status(enquiry_id uuid, new_status enquiry_status, reason text)`**
+- Callable only with a verified active admin session.
+- Apply the exact transition graph in Section 7.4; reject invalid transitions with a conflict error.
+- Update status/related timestamps with an optimistic-concurrency filter on the previous status and insert an event together.
+- Set `convertedAt` when transitioning to `converted`; set `archivedAt` when transitioning to `archived`.
+- Require a non-empty reason when setting `declined` or `archived`; limit it, store it in `declineReason` and event metadata, and expose it only inside the authorized admin area.
 
-- Callable only by authenticated users.
-- Must check `auth.uid()` and active membership inside the function, independently of the UI.
-- Apply the exact transition graph in Section 7.4; reject invalid transitions with a stable conflict error.
-- Update status/related timestamps and insert an event atomically.
-- Set `converted_at` when transitioning to `converted`; set `archived_at` when transitioning to `archived`.
-- Require a non-empty reason when setting `declined`; limit it to 500 characters, store it in `decline_reason` and event metadata, and expose it only inside the authorized admin area.
-
-**RPC contract C: `admin_assign_enquiry(enquiry_id uuid, assigned_user_id uuid nullable)`**
+**Operation C: admin assignment (`assignMongo`)**
 
 - Callable only by authenticated active members.
-- Check the actor is active; if assignee is non-null, confirm the target is an active admin membership.
-- Update the assignment and append the assignment/unassignment event atomically.
+- Check the actor is active; if assignee is non-null, confirm the target is an active admin user.
+- Update the assignment and append the assignment/unassignment event together.
 
-**RPC contract D: `admin_add_enquiry_note(enquiry_id uuid, body text)`**
+**Operation D: admin note (`addNoteMongo`)**
 
 - Callable only by authenticated active members.
-- Validate body length again in the database function.
-- Insert the note and note-added event atomically.
+- Validate body length again server-side.
+- Insert the note and note-added event together.
 
-**RPC contract E: notification attempts, retry and completion**
+**Operation E: notification attempts, retry and completion**
 
-- `begin_notification_attempt(notification_id uuid)` is callable only by the server's privileged role. It may claim a `pending` job with fewer than five attempts, atomically changes it to `processing`, increments `attempt_count`, sets `last_attempt_at`, and returns only the fields needed to render/send that notification.
-- `admin_claim_notification_retry(notification_id uuid)` is callable only by active admins. It may claim a `failed` job or a `pending`/`processing` job stale for at least ten minutes, with fewer than five attempts. It atomically changes the job to `processing`, increments `attempt_count`, sets `last_attempt_at`, and records a retry event. A recently processing job cannot be claimed twice.
-- The application sends the email outside the database transaction. Use provider idempotency support if available, keyed by the outbox ID and attempt number; still design for possible at-least-once delivery if a provider outcome is ambiguous.
-- `complete_notification_attempt(notification_id uuid, sent boolean, provider_message_id text, safe_error_code text)` is callable only by the server's privileged role. It changes `processing` to `sent` or `failed`, sets the safe provider ID/error code and timestamps, and appends a redacted `notification_failed` event on failure. It must not store raw exception payloads or secrets. Reject completion for a record that is not in the expected `processing` state unless the call is an explicitly idempotent replay with the same final result.
+- Claiming is atomic (`findOneAndUpdate`): creation delivery claims a non-`sent` job; admin retry claims a `failed` job with fewer than five attempts, moving it to `processing` and incrementing `attemptCount`.
+- The application sends the email outside the database write. Design for possible at-least-once delivery if a provider outcome is ambiguous.
+- Completion moves `processing` to `sent` or `failed`, sets the safe provider ID/error code and timestamps. It must not store raw exception payloads or secrets.
+- Login attempts on `/api/admin/session` are throttled (in-memory, 20 per 10 minutes per IP) with generic responses that never reveal whether an email belongs to an admin.
 
-All privileged functions must use stable SQLSTATE/error codes that the API maps to documented HTTP responses. Tests must prove users cannot call a privileged function they are not authorized to invoke. Do not enable PostgreSQL `SECURITY DEFINER` casually; review function owner, grants, `search_path`, and all object references.
+All operations must map to the documented HTTP responses. Tests must prove unauthorized callers cannot invoke admin operations. Review connection-string privileges and collection access.
 
 ---
 
@@ -887,7 +888,7 @@ Treat this only as a schema example. The server derives the normalized email, fi
 ### 10.8 `POST /api/admin/notifications/[id]/retry`
 
 - Requires active membership.
-- Retry `failed` records or stale `pending`/`processing` records according to RPC contract E; apply per-record retry limits and cooldown.
+- Retry `failed` records with fewer than five attempts via an atomic claim; apply per-record retry limits.
 - Do not permit arbitrary recipient changes through the retry endpoint.
 - Update attempts and result; do not expose raw provider exceptions.
 
@@ -908,7 +909,7 @@ Security is part of the implementation contract, not a later polish task.
 - Authorize membership and role for every protected record read and mutation. Perform the check inside the server-side operation, not solely in middleware or UI.
 - Protect against insecure direct object references: possession of an enquiry UUID does not authorize access.
 - Never accept admin role, actor ID, assigned user, status history or permission from the browser as trusted facts.
-- Use secure session cookies/official Supabase SSR session handling; HTTPS in production; review session lifetime, logout, revocation and MFA options.
+- Use secure stateful session cookies (random tokens, hashed server-side, TTL expiry, revocation on logout); HTTPS in production; review session lifetime, logout, revocation and MFA options.
 - Do not use `NEXT_PUBLIC_` prefixes for secret credentials. Only truly public keys/config may use public prefixes.
 - Do not create a public `/admin/register` route.
 
@@ -1128,8 +1129,8 @@ At minimum:
 ### 15.5 Security checks before release
 
 - Search production build artifacts and repository for accidental secrets.
-- Confirm no service-role secret is exposed in client bundles, source maps, HTML, or browser network requests.
-- Inspect RLS policies and grants on every data table.
+- Confirm no database credential is exposed in client bundles, source maps, HTML, or browser network requests.
+- Inspect collection indexes and database-user privileges.
 - Test horizontal access control using two different admin/test identities and an anonymous identity.
 - Validate no admin API response is publicly cached.
 - Confirm CSP/security headers on deployed staging pages.
@@ -1158,7 +1159,7 @@ At minimum:
 - Approved work/case-study structure that can be empty without fabricated entries.
 - Pricing/process/FAQ/contact/policy routes.
 - Project enquiry form with conditional fields, server validation, anti-abuse controls, idempotency and reference number.
-- Supabase/PostgreSQL schema, migrations, RLS and admin membership.
+- MongoDB Atlas collections, indexes, and admin users.
 - Minimal private admin area: list, detail, status transitions, assignment, internal notes and notification retry.
 - Transactional customer receipt and internal alert using outbox semantics.
 - Logging/redaction, basic health endpoints, metadata, sitemap/robots and security headers.
@@ -1224,16 +1225,18 @@ NEXT_PUBLIC_SITE_URL=http://localhost:3000
 NEXT_PUBLIC_STUDIO_NAME=Your Studio Name
 NEXT_PUBLIC_TURNSTILE_SITE_KEY=
 
-# Supabase public connection values
-NEXT_PUBLIC_SUPABASE_URL=
-NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
+# MongoDB Atlas — server only, never use NEXT_PUBLIC_ prefix
+MONGODB_URI=
+MONGODB_DB_NAME=digital_services_studio
 
-# Server-only credentials — never use NEXT_PUBLIC_ prefix
-SUPABASE_SERVICE_ROLE_KEY=
-SUPABASE_DB_URL=
+# Email provider
+EMAIL_PROVIDER=gmail
 
-# Transactional email
-RESEND_API_KEY=
+# Gmail SMTP credentials — server only
+GMAIL_USER=
+GMAIL_APP_PASSWORD=
+
+# Sender and internal recipient
 EMAIL_FROM=
 INTERNAL_NOTIFICATION_EMAIL=
 
@@ -1252,16 +1255,15 @@ LOG_RETENTION_DAYS=30
 NODE_ENV=development
 ```
 
-Do not expose `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_DB_URL`, `RESEND_API_KEY`, `TURNSTILE_SECRET_KEY`, or `UPSTASH_REDIS_REST_TOKEN` to the browser. `SUPABASE_DB_URL` is optional if all data access uses Supabase APIs; if used for migrations/scripts, never bundle it in the application and use a runtime role with the least privileges supported.
+Do not expose `MONGODB_URI`, `GMAIL_APP_PASSWORD`, `TURNSTILE_SECRET_KEY`, or `UPSTASH_REDIS_REST_TOKEN` to the browser. Give the Atlas database user only read/write on the application database; never bundle the connection string in the application client, and keep database modules behind a `server-only` import. Gmail requires an App Password with 2-Step Verification enabled — never use the regular account password; if App Passwords are unavailable, use OAuth 2.0 instead.
 
 Production configuration rules:
 
 - `NEXT_PUBLIC_SITE_URL` must be the canonical HTTPS production origin, no trailing-path ambiguity.
 - `NEXT_PUBLIC_STUDIO_NAME` must not be a placeholder.
 - Turnstile and rate limiter secrets must be present; production submission must fail closed if they are missing.
-- `EMAIL_FROM` must use a verified sender domain; `INTERNAL_NOTIFICATION_EMAIL` must be configured and monitored.
-- Supabase redirect/callback URLs must be exact and configured for the production hostname; do not use wildcards unnecessarily.
-- Admin memberships must be created through the documented bootstrap step after the auth user exists.
+- `EMAIL_FROM` must be the authenticated Gmail sender; `INTERNAL_NOTIFICATION_EMAIL` must be configured and monitored.
+- Admin users must be created through the documented bootstrap script, which stores only a bcrypt password hash.
 - `ADMIN_BOOTSTRAP_ALLOWED` must be false for normal production runtime. Bootstrap is an operator-only script, not a web endpoint.
 - Never reuse production credentials/data in local or preview environments.
 
@@ -1269,15 +1271,15 @@ Production configuration rules:
 
 Provide a safe operator script that:
 
-1. Requires an explicit command-line email argument and operator confirmation in interactive use.
-2. Requires the relevant service-role credential in the process environment.
-3. Looks up an existing verified Supabase Auth user by exact normalized email.
-4. Creates or activates a membership with the selected role only after the user exists and is verified.
+1. Requires explicit command-line email and password arguments (minimum 12 characters) and operator confirmation in interactive use.
+2. Requires `MONGODB_URI` in the process environment.
+3. Hashes the password with bcrypt and creates or re-activates the admin user with the selected role.
+4. Creates or activates membership only through this operator path.
 5. Is not routed through a public API or browser bundle.
 6. Prints the user email and membership result, never credentials/tokens.
-7. Can be safely rerun without duplicate memberships.
+7. Can be safely rerun without duplicate admin users (upsert by email; reruns rotate the password).
 
-Document the manual dashboard alternative, including how to revoke a founder's membership and session if access is lost.
+Document the revocation path: set `isActive=false` on the admin user and delete their `admin_sessions` rows if access is lost.
 
 ### 17.2 Required operational docs
 
@@ -1304,7 +1306,7 @@ Pull request checks MUST run:
 5. Integration tests against a test/local database where available.
 6. Production build.
 7. Dependency/security audit and secret scanning through supported CI tooling.
-8. Migration validation (apply migrations from a clean database in CI or a reproducible migration-test job).
+8. Database setup validation (collections/indexes created from a clean database in CI or a reproducible setup job).
 
 Critical Playwright tests should run on pull requests or at minimum before production deployment. No failed required checks may be silently ignored.
 
@@ -1316,10 +1318,10 @@ Deployment is blocked until each of these is true:
 - [ ] All publicly enabled service categories match real team capability.
 - [ ] Public content has no fictional work, testimonials, logos, metrics, or unapproved claims.
 - [ ] Privacy, Terms, Cancellation/Refund and IP/portfolio policies are reviewed and match the actual process.
-- [ ] Supabase production project is separate from development/preview.
-- [ ] Migrations have been applied and RLS/grants reviewed table-by-table.
-- [ ] All three founder accounts are intentionally invited, verified and authorized; no public sign-up exists.
-- [ ] Service-role keys and other secrets are server-only and not present in client bundles/repository.
+- [ ] Production Atlas cluster is separate from development/preview.
+- [ ] Collections have been created and indexes/privileges reviewed.
+- [ ] All three founder accounts are intentionally created and authorized via the bootstrap script; no public sign-up exists.
+- [ ] Database credentials and other secrets are server-only and not present in client bundles/repository.
 - [ ] Production Turnstile verification and distributed rate limiting are active.
 - [ ] Email sender domain is verified, team recipient is monitored, and customer/internal test messages are received.
 - [ ] Idempotency, persistence, admin authorization, notification failure/retry, and form error paths pass tests.
@@ -1343,17 +1345,16 @@ Use these primary/maintainer sources for implementation patterns. Verify them ag
 2. **Next.js Forms / Server Actions guidance** — https://nextjs.org/docs/app/guides/forms
 3. **Next.js data security guidance** — https://nextjs.org/docs/app/guides/data-security
 4. **Next.js security headers configuration** — https://nextjs.org/docs/app/api-reference/config/next-config-js/headers
-5. **Supabase Next.js quickstart and SSR patterns** — https://supabase.com/docs/guides/getting-started/quickstarts/nextjs
-6. **Supabase Storage access control** — https://supabase.com/docs/guides/storage/security/access-control
-7. **Supabase production/security configuration** — https://supabase.com/docs/guides/security/product-security
-8. **Supabase database backups and restore limitations** — https://supabase.com/docs/guides/platform/backups
-9. **PostgreSQL constraints** — https://www.postgresql.org/docs/18/ddl-constraints.html
-10. **OWASP File Upload Cheat Sheet** — https://cheatsheetseries.owasp.org/cheatsheets/File_Upload_Cheat_Sheet.html
-11. **OWASP Session Management Cheat Sheet** — https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html
-12. **OWASP Application Security Verification Standard (ASVS) 5.0** — https://owasp.org/www-project-application-security-verification-standard/
-13. **W3C Web Content Accessibility Guidelines 2.2** — https://www.w3.org/TR/WCAG22/
-14. **MeitY: Digital Personal Data Protection Rules, 2025 publication page** — https://www.meity.gov.in/documents/act-and-policies/digital-personal-data-protection-rules-2025-gDOxUjMtQWa
-15. **MeitY / Government of India data protection publications** — https://www.meity.gov.in/
+5. **MongoDB Node.js driver documentation** — https://www.mongodb.com/docs/drivers/node/
+6. **MongoDB Atlas security and backup documentation** — https://www.mongodb.com/docs/atlas/security/
+7. **Nodemailer SMTP documentation** — https://nodemailer.com/smtp/
+8. **Google App Passwords / 2-Step Verification** — https://support.google.com/accounts/answer/185833
+9. **OWASP File Upload Cheat Sheet** — https://cheatsheetseries.owasp.org/cheatsheets/File_Upload_Cheat_Sheet.html
+10. **OWASP Session Management Cheat Sheet** — https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html
+11. **OWASP Application Security Verification Standard (ASVS) 5.0** — https://owasp.org/www-project-application-security-verification-standard/
+12. **W3C Web Content Accessibility Guidelines 2.2** — https://www.w3.org/TR/WCAG22/
+13. **MeitY: Digital Personal Data Protection Rules, 2025 publication page** — https://www.meity.gov.in/documents/act-and-policies/digital-personal-data-protection-rules-2025-gDOxUjMtQWa
+14. **MeitY / Government of India data protection publications** — https://www.meity.gov.in/
 
 Research checked for this specification on **12 October 2026**. The listed sources support the architectural patterns; they do not certify that this implementation is secure, compliant, or correctly configured.
 
@@ -1383,8 +1384,8 @@ Complete these in order and report progress by stage:
 
 ### Stage C — Database and enquiry form
 
-- [ ] Add versioned migrations for Phase-1 schema.
-- [ ] Enable RLS and explicitly review policies/grants.
+- [ ] Add MongoDB collections/indexes for the Phase-1 model.
+- [ ] Verify authorization checks on every admin operation.
 - [ ] Implement shared Zod schemas and conditional form UI.
 - [ ] Implement Turnstile server verification, Upstash rate limiting, origin checks and honeypot.
 - [ ] Implement atomic enquiry/event/outbox creation, generated reference and idempotency.
@@ -1393,7 +1394,7 @@ Complete these in order and report progress by stage:
 
 ### Stage D — Admin system
 
-- [ ] Implement Supabase Auth sign-in and verified membership enforcement.
+- [ ] Implement MongoDB-backed admin sign-in and session/membership enforcement.
 - [ ] Implement paginated/searchable enquiry list and detail screen.
 - [ ] Implement status machine, assignment, internal notes and audit events.
 - [ ] Implement notification state/retry flow.
