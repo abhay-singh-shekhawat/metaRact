@@ -29,6 +29,7 @@ function clientIp(req: Request): string {
 
 export async function POST(req: Request) {
   const rid = requestId();
+  console.log(`[enquiry:${rid}] POST /api/public/enquiries received`);
   try {
     const contentLength = Number(req.headers.get("content-length") || "0");
     if (contentLength > 32 * 1024) {
@@ -71,6 +72,7 @@ export async function POST(req: Request) {
     // Abuse controls before any persistence.
     const rl = await checkEnquiryRateLimit(rateLimitKey(clientIp(req)));
     if (!rl.success) {
+      console.warn(`[enquiry:${rid}] RATE_LIMITED ip=${clientIp(req)}`);
       const res = errEnvelope(
         "RATE_LIMITED",
         "Too many attempts. Please wait a few minutes and try again.",
@@ -87,6 +89,7 @@ export async function POST(req: Request) {
     // local file store otherwise).
     const bodyRecord = body as Record<string, unknown>;
     if (typeof bodyRecord.website === "string" && bodyRecord.website.trim() !== "") {
+      console.log(`[enquiry:${rid}] honeypot hit — faking success`);
       return NextResponse.json(
         { data: { referenceNumber: "REQ-0000-000000", received: true }, requestId: rid },
         { status: 201 }
@@ -101,6 +104,7 @@ export async function POST(req: Request) {
         const k = String(issue.path[0] ?? "_form");
         if (!fieldErrors[k]) fieldErrors[k] = issue.message;
       }
+      console.warn(`[enquiry:${rid}] VALIDATION_FAILED fields=${Object.keys(fieldErrors).join(",")}`);
       return errEnvelope("VALIDATION_ERROR", "Please correct the highlighted fields.", rid, fieldErrors);
     }
     const headerKey = req.headers.get("idempotency-key");
@@ -112,9 +116,12 @@ export async function POST(req: Request) {
 
     const ts = await verifyTurnstile(prelim.data.turnstileToken, clientIp(req));
     if (!ts.ok) {
+      console.warn(`[enquiry:${rid}] ANTI_ABUSE_FAILED code=${ts.code ?? "unknown"}`);
       return errEnvelope(
         "ANTI_ABUSE_FAILED",
-        "Anti-abuse verification failed. Please reload and try again.",
+        ts.code === "TURNSTILE_MISSING"
+          ? "Please complete the verification checkbox and try again."
+          : "Anti-abuse verification failed. Please reload and try again.",
         rid,
         undefined,
         403
@@ -124,6 +131,7 @@ export async function POST(req: Request) {
     const result = await createEnquiryUseCase({ body, ip: clientIp(req) });
     if (!result.ok) {
       if (result.status === 409) {
+        console.warn(`[enquiry:${rid}] IDEMPOTENCY_CONFLICT`);
         return errEnvelope(
           "IDEMPOTENCY_KEY_REUSED",
           "This submission was already used with different details. Please reload the form for a new enquiry.",
@@ -132,14 +140,40 @@ export async function POST(req: Request) {
           409
         );
       }
+      if (result.status === 500 || (result as { code?: string }).code === "storage_failed") {
+        console.error(`[enquiry:${rid}] STORAGE_FAILED — enquiry NOT saved`);
+        logEvent({ level: "error", route: "POST /api/public/enquiries", code: "STORAGE_FAILED", requestId: rid });
+        return errEnvelope("INTERNAL_ERROR", "Could not save your enquiry. Please retry — your text is preserved.", rid, result.fieldErrors, 500);
+      }
+      console.warn(`[enquiry:${rid}] VALIDATION_FAILED fields=${Object.keys(result.fieldErrors ?? {}).join(",")}`);
       return errEnvelope("VALIDATION_ERROR", "Please correct the highlighted fields.", rid, result.fieldErrors);
     }
     logEvent({ level: "info", route: "POST /api/public/enquiries", code: result.duplicate ? "DUPLICATE_REPLAY" : "CREATED", requestId: rid });
+    if ("honeypot" in result && result.honeypot) {
+      console.log(`[enquiry:${rid}] success ref=${result.referenceNumber} (honeypot, nothing saved)`);
+    } else if (result.duplicate) {
+      console.log(`[enquiry:${rid}] success ref=${result.referenceNumber} (duplicate replay, no new email)`);
+    } else {
+      const notes = "notifications" in result && Array.isArray(result.notifications)
+        ? result.notifications.map((n: { type: string; status: string; mode?: string; errorCode?: string | null }) => `${n.type}=${n.status}${n.mode === "log-only" ? "(log-only)" : ""}${n.errorCode ? `(${n.errorCode})` : ""}`).join(" ")
+        : "";
+      console.log(`[enquiry:${rid}] success ref=${result.referenceNumber} email_mode=${"emailMode" in result ? result.emailMode : "?"} ${notes}`);
+    }
     return NextResponse.json(
-      { data: { referenceNumber: result.referenceNumber, received: true }, requestId: rid },
+      {
+        data: {
+          referenceNumber: result.referenceNumber,
+          received: true,
+          duplicate: result.duplicate ?? false,
+          emailMode: "emailMode" in result ? result.emailMode : undefined,
+          notifications: "notifications" in result ? result.notifications : undefined,
+        },
+        requestId: rid,
+      },
       { status: result.status }
     );
-  } catch {
+  } catch (err) {
+    console.error(`[enquiry:${rid}] UNHANDLED detail=${String((err as { message?: unknown })?.message ?? err).slice(0, 300)}`);
     logEvent({ level: "error", route: "POST /api/public/enquiries", code: "UNHANDLED", requestId: rid });
     return errEnvelope("INTERNAL_ERROR", "Something went wrong. Your request was not confirmed — please retry.", rid, undefined, 500);
   }

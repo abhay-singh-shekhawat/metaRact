@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { enabledServices } from "@/config/services";
 import { siteConfig } from "@/config/site";
 
@@ -31,6 +31,48 @@ function newIdempotencyKey(): string {
   return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
     const r = (Math.random() * 16) | 0;
     return (c === "x" ? r : (r & 0x3) | 0x8).toString(16);
+  });
+}
+
+declare global {
+  interface Window {
+    turnstile?: {
+      render: (
+        el: HTMLElement,
+        opts: {
+          sitekey: string;
+          callback?: (token: string) => void;
+          "expired-callback"?: () => void;
+          "error-callback"?: () => void;
+        }
+      ) => string;
+      reset: (widgetId?: string) => void;
+      remove: (widgetId?: string) => void;
+    };
+  }
+}
+
+/** Load Cloudflare Turnstile once; resolves when window.turnstile is ready. */
+function loadTurnstileScript(): Promise<void> {
+  if (typeof window === "undefined") return Promise.resolve();
+  if (window.turnstile) return Promise.resolve();
+  const existing = document.querySelector<HTMLScriptElement>("script[data-turnstile]");
+  if (existing) {
+    return new Promise((resolve) => {
+      existing.addEventListener("load", () => resolve(), { once: true });
+      // If it already loaded, resolve on next tick.
+      setTimeout(() => resolve(), 0);
+    });
+  }
+  return new Promise((resolve, reject) => {
+    const s = document.createElement("script");
+    s.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+    s.async = true;
+    s.defer = true;
+    s.setAttribute("data-turnstile", "");
+    s.onload = () => resolve();
+    s.onerror = () => reject(new Error("turnstile_load_failed"));
+    document.head.appendChild(s);
   });
 }
 
@@ -65,6 +107,63 @@ export function EnquiryForm({ preselected }: { preselected?: string }) {
   const isAi = serviceSlug === "ai-automation";
 
   const turnstileSiteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || "";
+  const [turnstileToken, setTurnstileToken] = useState("");
+  const [turnstileFailed, setTurnstileFailed] = useState(false);
+  const turnstileBoxRef = useRef<HTMLDivElement>(null);
+  const turnstileWidgetId = useRef<string | null>(null);
+
+  // Render the Turnstile widget explicitly and capture its token.
+  // Without this, the form submits an empty token and the server 403s.
+  useEffect(() => {
+    if (!turnstileSiteKey) return;
+    let cancelled = false;
+    loadTurnstileScript()
+      .then(() => {
+        if (cancelled || !turnstileBoxRef.current || !window.turnstile) return;
+        if (turnstileWidgetId.current) return;
+        try {
+          turnstileWidgetId.current = window.turnstile.render(turnstileBoxRef.current, {
+            sitekey: turnstileSiteKey,
+            callback: (t: string) => {
+              setTurnstileToken(t);
+              setTurnstileFailed(false);
+            },
+            "expired-callback": () => setTurnstileToken(""),
+            "error-callback": () => {
+              setTurnstileToken("");
+              setTurnstileFailed(true);
+            },
+          });
+        } catch {
+          setTurnstileFailed(true);
+        }
+      })
+      .catch(() => setTurnstileFailed(true));
+    return () => {
+      cancelled = true;
+      try {
+        if (turnstileWidgetId.current && window.turnstile) window.turnstile.remove(turnstileWidgetId.current);
+      } catch {
+        /* noop */
+      }
+      turnstileWidgetId.current = null;
+    };
+  }, [turnstileSiteKey]);
+
+  function resetTurnstile() {
+    setTurnstileToken("");
+    setTurnstileFailed(false);
+    try {
+      if (turnstileWidgetId.current && window.turnstile) window.turnstile.reset(turnstileWidgetId.current);
+    } catch {
+      /* noop */
+    }
+  }
+
+  function retryTurnstile() {
+    // 600* errors are retryable per Cloudflare docs — reset, don't force page reload.
+    resetTurnstile();
+  }
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -127,6 +226,7 @@ export function EnquiryForm({ preselected }: { preselected?: string }) {
       if (res.ok) {
         setSuccessRef(data?.data?.referenceNumber || "received");
         form.reset();
+        resetTurnstile();
         document.getElementById("form-status")?.focus();
         // analytics: aggregate only
         try {
@@ -444,7 +544,20 @@ export function EnquiryForm({ preselected }: { preselected?: string }) {
       </div>
 
       {turnstileSiteKey ? (
-        <div className="cf-turnstile" data-sitekey={turnstileSiteKey} data-theme="light" />
+        <div>
+          <div ref={turnstileBoxRef} />
+          <input type="hidden" name="turnstileToken" value={turnstileToken} readOnly />
+          {turnstileFailed ? (
+            <div className="mt-2 flex flex-wrap items-center gap-3">
+              <p className={errCls}>Verification failed (code 600* — retryable). This is common on Brave / Firefox / VPN.</p>
+              <button type="button" onClick={retryTurnstile} className="rounded-[8px] border border-[var(--line)] bg-white px-4 py-2 text-[14px] font-semibold text-[#151923] hover:bg-[#F0F3F9]">
+                Retry verification
+              </button>
+            </div>
+          ) : (
+            !turnstileToken && <p className={helpCls}>Complete the verification above before submitting.</p>
+          )}
+        </div>
       ) : (
         <input type="hidden" name="turnstileToken" value="" />
       )}

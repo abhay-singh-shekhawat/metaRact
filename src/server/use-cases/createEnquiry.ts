@@ -9,13 +9,23 @@ import {
 } from "@/lib/security/fingerprint";
 import { readStore, writeStore, nextReference } from "@/server/db";
 import { isMongoConfigured } from "@/lib/mongodb/client";
-import { sendEmail, teamAlertHtml, customerReceiptHtml } from "@/lib/email/sender";
+import { sendEmail, teamAlertHtml, customerReceiptHtml, getEmailMode } from "@/lib/email/sender";
 import { siteConfig } from "@/config/site";
 import { getService } from "@/config/services";
 
 export interface CreateInput {
   body: unknown;
   ip: string;
+}
+
+export interface NotificationStatus {
+  type: "team_new_enquiry" | "customer_receipt";
+  to: string;
+  status: "sent" | "failed" | "skipped";
+  messageId?: string | null;
+  errorCode?: string | null;
+  /** "log-only" = written to terminal only, no real email left the server. */
+  mode: "smtp" | "log-only";
 }
 
 export async function createEnquiryUseCase(input: CreateInput) {
@@ -37,12 +47,15 @@ export async function createEnquiryUseCase(input: CreateInput) {
 
   // Honeypot: pretend success without persisting.
   if (data.website && data.website.trim() !== "") {
+    console.log(`[enquiry] honeypot hit — faking success, nothing saved (ip=${input.ip})`);
     return {
       ok: true as const,
       status: 201,
       referenceNumber: "REQ-0000-000000",
       duplicate: false,
       honeypot: true,
+      emailMode: getEmailMode(),
+      notifications: [] as NotificationStatus[],
     };
   }
 
@@ -108,10 +121,31 @@ export async function createEnquiryUseCase(input: CreateInput) {
 
   // MongoDB Atlas path (production). File-store path below is the local fallback.
   if (isMongoConfigured()) {
-    return await createEnquiryMongoFlow(normalized, fingerprint);
+    try {
+      return await createEnquiryMongoFlow(normalized, fingerprint);
+    } catch (err) {
+      console.error(`[enquiry] storage FAILED (mongo) detail=${String((err as { message?: unknown })?.message ?? err).slice(0, 200)}`);
+      return {
+        ok: false as const,
+        status: 500,
+        code: "storage_failed",
+        fieldErrors: { _form: "Could not save your enquiry. Please retry — your text is preserved." },
+      };
+    }
   }
 
-  const store = await readStore();
+  let store: Awaited<ReturnType<typeof readStore>>;
+  try {
+    store = await readStore();
+  } catch (err) {
+    console.error(`[enquiry] storage FAILED (read) detail=${String((err as { message?: unknown })?.message ?? err).slice(0, 200)}`);
+    return {
+      ok: false as const,
+      status: 500,
+      code: "storage_failed",
+      fieldErrors: { _form: "Could not save your enquiry. Please retry — your text is preserved." },
+    };
+  }
 
   const existing = store.enquiries.find(
     (e) => e.idempotencyKey === normalized.idempotencyKey
@@ -125,11 +159,14 @@ export async function createEnquiryUseCase(input: CreateInput) {
         fieldErrors: {},
       };
     }
+    console.log(`[enquiry] duplicate replay ref=${existing.referenceNumber} (same submission key, no new email)`);
     return {
       ok: true as const,
       status: 200,
       referenceNumber: existing.referenceNumber,
       duplicate: true,
+      emailMode: getEmailMode(),
+      notifications: [] as NotificationStatus[],
     };
   }
 
@@ -184,6 +221,8 @@ export async function createEnquiryUseCase(input: CreateInput) {
   });
   const teamRecipient =
     process.env.INTERNAL_NOTIFICATION_EMAIL || "team@example.com";
+  const emailMode = getEmailMode();
+  console.log(`[enquiry] saving service=${normalized.serviceSlug} team_to=${teamRecipient} customer_to=${normalized.emailNormalized} email_mode=${emailMode}`);
   store.outbox.push({
     id: randomUUID(),
     enquiryId: id,
@@ -210,12 +249,23 @@ export async function createEnquiryUseCase(input: CreateInput) {
     lastErrorCode: null,
     createdAt: now,
   });
-  await writeStore(store);
+  try {
+    await writeStore(store);
+  } catch (err) {
+    console.error(`[enquiry] storage FAILED (write) detail=${String((err as { message?: unknown })?.message ?? err).slice(0, 200)}`);
+    return {
+      ok: false as const,
+      status: 500,
+      code: "storage_failed",
+      fieldErrors: { _form: "Could not save your enquiry. Please retry — your text is preserved." },
+    };
+  }
+  console.log(`[enquiry] saved ref=${referenceNumber} id=${id}`);
 
   // Best-effort notification: failure must not delete the enquiry.
   const siteUrl = siteConfig.siteUrl;
   const jobs = readOutboxFor(id, store);
-  await deliverJobs(jobs, {
+  const notifications = await deliverJobs(jobs, {
     referenceNumber,
     serviceTitle: service?.title ?? normalized.serviceSlug,
     projectTitle: normalized.projectTitle,
@@ -224,7 +274,10 @@ export async function createEnquiryUseCase(input: CreateInput) {
     customerEmail: normalized.emailNormalized,
   });
 
-  return { ok: true as const, status: 201, referenceNumber, duplicate: false };
+  const summary = notifications.map((n) => `${n.type}=${n.status}${n.mode === "log-only" ? "(log-only)" : ""}${n.errorCode ? `(${n.errorCode})` : ""}`).join(" ");
+  console.log(`[enquiry] done ref=${referenceNumber} email_mode=${emailMode} ${summary}`);
+
+  return { ok: true as const, status: 201, referenceNumber, duplicate: false, emailMode, notifications };
 }
 
 function readOutboxFor(enquiryId: string, store: Awaited<ReturnType<typeof readStore>>) {
@@ -279,42 +332,72 @@ async function createEnquiryMongoFlow(
     };
   }
   if (created.duplicate) {
+    console.log(`[enquiry] duplicate replay ref=${created.referenceNumber} (same submission key, no new email)`);
     return {
       ok: true as const,
       status: 200,
       referenceNumber: created.referenceNumber,
       duplicate: true,
+      emailMode: getEmailMode(),
+      notifications: [] as NotificationStatus[],
     };
   }
   const service = getService(normalized.serviceSlug);
   const siteUrl = siteConfig.siteUrl;
+  const emailMode = getEmailMode();
+  console.log(`[enquiry] saving (mongo) service=${normalized.serviceSlug} team_to=${teamRecipient} customer_to=${normalized.emailNormalized} email_mode=${emailMode}`);
   const jobs = await readOutboxForMongo(created.enquiryId);
+  const notifications: NotificationStatus[] = [];
   for (const job of jobs) {
     const claimed = await markOutboxProcessingMongo(job.id);
     if (!claimed) continue;
     const isTeam = job.notificationType === "team_new_enquiry";
-    const result = await sendEmail({
-      to: job.recipient,
-      subject: isTeam
-        ? `New project enquiry — ${created.referenceNumber} — ${service?.title ?? normalized.serviceSlug}`
-        : `We received your project enquiry — ${created.referenceNumber}`,
-      html: isTeam
-        ? teamAlertHtml(
-            created.referenceNumber,
-            service?.title ?? normalized.serviceSlug,
-            normalized.projectTitle,
-            `${siteUrl}/admin/enquiries/${created.enquiryId}`
-          )
-        : customerReceiptHtml(created.referenceNumber, teamRecipient),
+    console.log(`[enquiry] sending ${job.notificationType} to=${job.recipient} ref=${created.referenceNumber}`);
+    let result;
+    try {
+      result = await sendEmail({
+        to: job.recipient,
+        subject: isTeam
+          ? `New project enquiry — ${created.referenceNumber} — ${service?.title ?? normalized.serviceSlug}`
+          : `We received your project enquiry — ${created.referenceNumber}`,
+        html: isTeam
+          ? teamAlertHtml(
+              created.referenceNumber,
+              service?.title ?? normalized.serviceSlug,
+              normalized.projectTitle,
+              `${siteUrl}/admin/enquiries/${created.enquiryId}`
+            )
+          : customerReceiptHtml(created.referenceNumber, teamRecipient),
+        type: job.notificationType,
+      });
+    } catch (err) {
+      console.error(`[enquiry] email THREW ${job.notificationType} to=${job.recipient} detail=${String((err as { message?: unknown })?.message ?? err).slice(0, 200)}`);
+      result = { ok: false as const, errorCode: "send_threw", mode: emailMode as "smtp" | "log-only" };
+    }
+    try {
+      await completeOutboxJobMongo(job.id, result);
+    } catch (err) {
+      console.error(`[enquiry] outbox update FAILED job=${job.id} detail=${String((err as { message?: unknown })?.message ?? err).slice(0, 200)}`);
+    }
+    console.log(`[enquiry] ${job.notificationType} -> ${result.ok ? "sent" : `FAILED(${result.errorCode ?? "send_failed"})`} to=${job.recipient}${result.mode === "log-only" ? " [log-only, no real email]" : ""}`);
+    notifications.push({
       type: job.notificationType,
+      to: job.recipient,
+      status: result.ok ? "sent" : "failed",
+      messageId: result.messageId ?? null,
+      errorCode: result.ok ? null : (result.errorCode ?? "send_failed"),
+      mode: result.mode ?? emailMode,
     });
-    await completeOutboxJobMongo(job.id, result);
   }
+  const summary = notifications.map((n) => `${n.type}=${n.status}${n.mode === "log-only" ? "(log-only)" : ""}${n.errorCode ? `(${n.errorCode})` : ""}`).join(" ");
+  console.log(`[enquiry] done ref=${created.referenceNumber} email_mode=${emailMode} ${summary}`);
   return {
     ok: true as const,
     status: 201,
     referenceNumber: created.referenceNumber,
     duplicate: false,
+    emailMode,
+    notifications,
   };
 }
 
@@ -328,9 +411,16 @@ async function deliverJobs(
     contactEmail: string;
     customerEmail: string;
   }
-) {
+): Promise<NotificationStatus[]> {
   const { readStore: rs, writeStore: ws } = await import("@/server/db");
-  const store = await rs();
+  const notifications: NotificationStatus[] = [];
+  let store: Awaited<ReturnType<typeof rs>>;
+  try {
+    store = await rs();
+  } catch (err) {
+    console.error(`[enquiry] outbox read FAILED ref=${ctx.referenceNumber} detail=${String((err as { message?: unknown })?.message ?? err).slice(0, 200)}`);
+    return notifications;
+  }
   for (const job of jobs) {
     const row = store.outbox.find((o) => o.id === job.id);
     if (!row || row.status === "sent") continue;
@@ -338,16 +428,23 @@ async function deliverJobs(
     row.attemptCount += 1;
     row.lastAttemptAt = new Date().toISOString();
     const isTeam = row.notificationType === "team_new_enquiry";
-    const result = await sendEmail({
-      to: row.recipient,
-      subject: isTeam
-        ? `New project enquiry — ${ctx.referenceNumber} — ${ctx.serviceTitle}`
-        : `We received your project enquiry — ${ctx.referenceNumber}`,
-      html: isTeam
-        ? teamAlertHtml(ctx.referenceNumber, ctx.serviceTitle, ctx.projectTitle, ctx.adminUrl)
-        : customerReceiptHtml(ctx.referenceNumber, ctx.contactEmail),
-      type: row.notificationType,
-    });
+    console.log(`[enquiry] sending ${row.notificationType} to=${row.recipient} ref=${ctx.referenceNumber}`);
+    let result;
+    try {
+      result = await sendEmail({
+        to: row.recipient,
+        subject: isTeam
+          ? `New project enquiry — ${ctx.referenceNumber} — ${ctx.serviceTitle}`
+          : `We received your project enquiry — ${ctx.referenceNumber}`,
+        html: isTeam
+          ? teamAlertHtml(ctx.referenceNumber, ctx.serviceTitle, ctx.projectTitle, ctx.adminUrl)
+          : customerReceiptHtml(ctx.referenceNumber, ctx.contactEmail),
+        type: row.notificationType,
+      });
+    } catch (err) {
+      console.error(`[enquiry] email THREW ${row.notificationType} to=${row.recipient} detail=${String((err as { message?: unknown })?.message ?? err).slice(0, 200)}`);
+      result = { ok: false as const, errorCode: "send_threw", mode: getEmailMode() };
+    }
     if (result.ok) {
       row.status = "sent";
       row.sentAt = new Date().toISOString();
@@ -357,6 +454,20 @@ async function deliverJobs(
       row.status = "failed";
       row.lastErrorCode = result.errorCode ?? "send_failed";
     }
+    console.log(`[enquiry] ${row.notificationType} -> ${result.ok ? "sent" : `FAILED(${result.errorCode ?? "send_failed"})`} to=${row.recipient}${result.mode === "log-only" ? " [log-only, no real email]" : ""}`);
+    notifications.push({
+      type: row.notificationType,
+      to: row.recipient,
+      status: result.ok ? "sent" : "failed",
+      messageId: result.messageId ?? null,
+      errorCode: result.ok ? null : (result.errorCode ?? "send_failed"),
+      mode: result.mode ?? getEmailMode(),
+    });
   }
-  await ws(store);
+  try {
+    await ws(store);
+  } catch (err) {
+    console.error(`[enquiry] outbox write FAILED ref=${ctx.referenceNumber} detail=${String((err as { message?: unknown })?.message ?? err).slice(0, 200)}`);
+  }
+  return notifications;
 }

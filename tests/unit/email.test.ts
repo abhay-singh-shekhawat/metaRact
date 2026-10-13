@@ -69,7 +69,7 @@ describe("mocked smtp transport", () => {
       html: "<p>hello</p>",
       type: "team_new_enquiry",
     });
-    expect(r).toEqual({ ok: true, messageId: "gmail-123" });
+    expect(r).toMatchObject({ ok: true, messageId: "gmail-123", mode: "smtp" });
   });
 
   it("rejects invalid recipients without touching smtp", async () => {

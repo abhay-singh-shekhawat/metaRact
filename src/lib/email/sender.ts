@@ -4,6 +4,10 @@ export interface EmailResult {
   ok: boolean;
   messageId?: string;
   errorCode?: string;
+  /** Short, safe-to-log provider detail (no credentials). */
+  detail?: string;
+  /** Which adapter handled this send. */
+  mode?: "smtp" | "log-only";
 }
 
 function escapeText(s: string): string {
@@ -50,11 +54,24 @@ export function isGmailConfigured(): boolean {
   );
 }
 
+/** Which adapter sendEmail() will use. "log-only" means NO real email leaves the server. */
+export function getEmailMode(): "smtp" | "log-only" {
+  return isGmailConfigured() ? "smtp" : "log-only";
+}
+
+function fromAddress(): string | null {
+  const raw = (process.env.EMAIL_FROM || "").trim().replace(/^["']|["']$/g, "").trim();
+  if (!raw) return null;
+  const m = raw.match(/<([^<>@\s]+@[^<>@\s]+\.[^<>@\s]+)>\s*$/);
+  return m ? m[1] : raw;
+}
+
 function configError(): string | null {
   if (!process.env.GMAIL_USER) return "GMAIL_USER is not configured.";
   if (!process.env.GMAIL_APP_PASSWORD) return "GMAIL_APP_PASSWORD is not configured.";
   if (!process.env.EMAIL_FROM) return "EMAIL_FROM is not configured.";
-  if (!EMAIL_RE.test(process.env.EMAIL_FROM)) return "EMAIL_FROM is not a valid email address.";
+  const addr = fromAddress();
+  if (!addr || !EMAIL_RE.test(addr)) return "EMAIL_FROM is not a valid email address.";
   return null;
 }
 
@@ -121,14 +138,15 @@ export async function sendEmail(opts: {
   if (misconfigured) {
     // Dev/test fallback: log-only adapter, marked sent so the enquiry flow
     // stays verifiable without credentials. Production preflight blocks launch.
+    // Loud terminal line so operators never mistake this for a real send.
     console.log(
-      `[email:log-only] type=${opts.type} to=${opts.to} subject=${opts.subject}`
+      `[email][log-only-mode] NOT sending real email (${misconfigured}) type=${opts.type} to=${opts.to} subject=${opts.subject}`
     );
-    return { ok: true, messageId: `log-${Date.now()}` };
+    return { ok: true, messageId: `log-${Date.now()}`, mode: "log-only", detail: misconfigured };
   }
   if (!EMAIL_RE.test(opts.to)) {
-    console.error(`[email] invalid recipient type=${opts.type}`);
-    return { ok: false, errorCode: "invalid_recipient" };
+    console.error(`[email][smtp] invalid recipient type=${opts.type} to=${opts.to}`);
+    return { ok: false, errorCode: "invalid_recipient", mode: "smtp", detail: "Recipient address failed validation." };
   }
   try {
     const transport = await getTransport();
@@ -141,9 +159,14 @@ export async function sendEmail(opts: {
     });
     // Accepted by Gmail for submission. Confirmed delivery is not observable
     // here; downstream bounces are handled out of band.
-    return { ok: true, messageId: info?.messageId };
+    console.log(
+      `[email][smtp] sent type=${opts.type} to=${opts.to} messageId=${info?.messageId ?? "unknown"}`
+    );
+    return { ok: true, messageId: info?.messageId, mode: "smtp" };
   } catch (err) {
-    console.error(`[email] smtp error type=${opts.type}`);
-    return { ok: false, errorCode: classifySmtpError(err) };
+    const code = classifySmtpError(err);
+    const detail = String((err as { message?: unknown })?.message ?? err).slice(0, 200);
+    console.error(`[email][smtp] FAILED type=${opts.type} to=${opts.to} errorCode=${code} detail=${detail}`);
+    return { ok: false, errorCode: code, mode: "smtp", detail };
   }
 }
