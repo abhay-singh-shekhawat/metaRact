@@ -1,11 +1,12 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import Link from "next/link";
-import { getWork } from "@/config/work";
+import { approvedWork, getWork } from "@/config/work";
 import { getServiceAny } from "@/config/services";
 import { siteConfig } from "@/config/site";
 import { ButtonLink, Card, Chip, PageHero, Tick } from "@/components/ui/primitives";
 import { Reveal } from "@/components/motion/Reveal";
+import { CompositionPlate } from "@/components/marketing/CompositionPlate";
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
@@ -18,6 +19,8 @@ export default async function WorkDetail({ params }: { params: Promise<{ slug: s
   const { slug } = await params;
   const w = getWork(slug);
   if (!w) notFound();
+
+  const plateIndex = Math.max(0, approvedWork().findIndex((item) => item.slug === w.slug));
 
   return (
     <>
@@ -39,6 +42,25 @@ export default async function WorkDetail({ params }: { params: Promise<{ slug: s
           </>
         }
       />
+
+      {/* ── The plate: this piece's own drawing, generated from its metadata ─ */}
+      <section className="py-14 md:py-20">
+        <div className="container-studio">
+          <div className="max-w-[820px]">
+            <div className="hidden md:block">
+              <CompositionPlate item={w} index={plateIndex} />
+            </div>
+            <div className="md:hidden">
+              <CompositionPlate item={w} index={plateIndex} variant="compact" />
+            </div>
+            <p className="mt-4 max-w-[74ch] text-[13px] leading-relaxed text-[var(--ink-3)]">
+              Generated composition plate. The section rhythm is drawn from this project&rsquo;s own
+              metadata at build time — a drawing, not a screenshot. It depicts no client, metric, or
+              result.
+            </p>
+          </div>
+        </div>
+      </section>
 
       <section className="band py-20 md:py-28">
         <div className="container-studio grid gap-12 lg:grid-cols-[1.5fr_1fr] lg:gap-16">

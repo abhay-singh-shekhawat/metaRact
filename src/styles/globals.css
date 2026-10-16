@@ -1029,6 +1029,41 @@ body {
   }
 
   /* ==========================================================================
+     Composition plate — the drawing a work item gets instead of a screenshot
+     (DESIGN.md §2.1, §5)
+
+     Inline SVG, drawn server-side from the item's own slug. No client JS and no
+     runtime asset, so `default-src 'self'` holds and a case study's visual costs
+     nothing on the wire. Text sizes here are in user units and scale with the
+     sheet, which is why the compact variant carries no labels at all.
+     ========================================================================== */
+  .plate {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+
+  .plate text {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    letter-spacing: 0.12em;
+    fill: var(--ink-3);
+  }
+
+  .plate .plate-legend {
+    fill: var(--ink-2);
+  }
+
+  .plate .plate-note {
+    font-size: 9.5px;
+    letter-spacing: 0.16em;
+  }
+
+  .plate .plate-enquiry {
+    fill: var(--accent);
+  }
+
+  /* ==========================================================================
      Admin console
      ========================================================================== */
 

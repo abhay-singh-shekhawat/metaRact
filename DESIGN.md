@@ -63,6 +63,12 @@ camera and no work.
   no ambient particle fields, no meteors, no glow-for-glow's-sake.
 - **Reference:** DREIRAUM's blueprint-view hero (hold to reveal the wireframe) is the
   closest fit to the drafting-table language.
+- **Nothing is pictured that cannot be shown.** The studio publishes no client work
+  without written permission, so by definition it owns no screenshot it may use.
+  Rather than fake one, every work item is given a **generated composition plate** —
+  a section-rhythm drawing derived deterministically from that item's own metadata
+  (§5). A drawing is never a claim: it depicts no interface, client, metric or
+  result, and it says so on its own face.
 - **Rejected in 3D too:** neon, bloom-heavy gradients, glassmorphism, particle
   fields, purple/teal "AI" palettes, CDN-hosted assets.
 
@@ -172,6 +178,18 @@ sequence three ways — the sticky file, the index rail and the small-screen met
 — from a single `active` index fed by one `IntersectionObserver` band. Step copy
 stays in the route and is passed in; the register never owns content.
 
+The work register (`src/components/marketing/CompositionPlate.tsx`, geometry in
+`plateArt.ts`) is the one entry above that is **not** a client leaf: it is a
+server-rendered inline SVG, so it costs nothing on the wire and needs no
+hydration. Each approved work item draws one plate from its own slug, which is why
+the same project always draws the same sheet. `full` prints the folio, the stack
+legend and the "a drawing, not a screenshot" note; `compact` drops all chrome,
+because at thumbnail size any label would be illegible, and is `aria-hidden` —
+in list rows it sits inside a link whose text already carries the meaning. The
+plan is a rhythm study and never a chart: sections vary by *how many* grid columns
+they take, never by proportional width, so nothing on the sheet can be misread as
+a measurement or a result.
+
 Client leaves may wrap server-rendered children (passed as props); they must never
 import server-only code.
 
@@ -256,8 +274,11 @@ Rules: every multi-column layout declares its `<768px` collapse; the hero uses
 `min-h-[100dvh]`-free height (no full-viewport lock); the signature object falls
 back to a flat stack below `lg` and on every device the WebGL gate rejects
 (coarse pointer, reduced motion, data-saver, no WebGL) — see §6.1; nav renders on
-one line to `1024` then collapses to a full-screen sheet; nothing may introduce
-horizontal scroll (`document.scrollWidth === clientWidth` is asserted in the QA sweep).
+one line to `1024` then collapses to a full-screen sheet; the case-study plate
+prints its full chrome from `768` up and swaps to the unlabelled compact plan below
+that (any label would render about 5 px tall at a 350 px sheet); nothing may
+introduce horizontal scroll (`document.scrollWidth === clientWidth` is asserted in
+the QA sweep).
 
 ## 8. Accessibility constraints
 
@@ -265,6 +286,10 @@ horizontal scroll (`document.scrollWidth === clientWidth` is asserted in the QA 
 - Minimum target `44px`. Form labels always above inputs; errors below, tied by `aria-describedby`.
 - Body contrast ≥ 4.5:1; headings ≥ 7:1 (`--ink-2` on `--canvas` = 7.4:1; white on `--ink` = 18.9:1).
 - Status never colour-only. Motion never the only carrier of meaning.
+- The composition plate carries a single `role="img"` label on its full variant and
+  is `aria-hidden` on the compact one. Everything the sheet shows (title, stack,
+  date, type) is also present as real page text, so the drawing never carries
+  meaning alone — and a screen reader is never read the plate's internal labels twice.
 - Decorative motion (lamp, tilt, ornament) is `aria-hidden` and keyboard-irrelevant;
   it must never gate a function. Admin retains `no-store` caching and its
   server-side auth checks untouched.
@@ -299,6 +324,10 @@ width, **no console errors**, and **one `<h1>` per page**.
    - Phase 3 adds **no dependency at all** — the process register is CSS 3D plus one
      `IntersectionObserver`, the same technique as Phase 1. Measured: `/process`
      First Load JS **108 kB** and shared First Load JS **103 kB**, both unchanged.
+   - Phase 4 adds **no dependency at all** — the composition plate is
+     server-rendered inline SVG and ships no client JS. Measured: `/work` and
+     `/work/[slug]` First Load JS **107 kB** and shared First Load JS **103 kB**,
+     all unchanged.
    - Any further library must be justified the same way: measure it, then decide.
 2. **No icon library.** Still deliberate. Icons are typographic glyphs and simple
    geometric SVG marks only.

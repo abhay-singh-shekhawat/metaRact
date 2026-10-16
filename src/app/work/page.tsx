@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { approvedWork } from "@/config/work";
+import { approvedWork, type WorkItem } from "@/config/work";
 import { siteConfig } from "@/config/site";
 import { ButtonLink, Card, Chip, Eyebrow, PageHero, Tick } from "@/components/ui/primitives";
 import { Reveal } from "@/components/motion/Reveal";
+import { CompositionPlate } from "@/components/marketing/CompositionPlate";
 
 export const metadata: Metadata = { title: "Work", description: "Approved client work and clearly labelled concept projects." };
 
@@ -23,6 +24,7 @@ export default function WorkPage() {
           { k: "Client case studies", v: real.length === 0 ? "None published yet" : `${real.length} published` },
           { k: "Concept pieces", v: `${concepts.length} self-initiated` },
           { k: "Permission", v: "Written client approval before publishing" },
+          { k: "Visuals", v: "Generated plates, never fake screenshots" },
         ]}
         cta={<ButtonLink href="/start-project">{siteConfig.primaryCta}</ButtonLink>}
       />
@@ -47,7 +49,7 @@ export default function WorkPage() {
               <ol className="mt-6 border-t border-[var(--line)]">
                 {real.map((w, i) => (
                   <Reveal as="li" key={w.slug} delay={i * 70} className="border-b border-[var(--line)]">
-                    <WorkRow slug={w.slug} title={w.title} summary={w.summary} index={i} isConcept={false} tags={w.stack} />
+                    <WorkRow item={w} index={i} isConcept={false} />
                   </Reveal>
                 ))}
               </ol>
@@ -64,7 +66,7 @@ export default function WorkPage() {
               <ol className="mt-6 border-t border-[var(--line)]">
                 {concepts.map((w, i) => (
                   <Reveal as="li" key={w.slug} delay={i * 70} className="border-b border-[var(--line)]">
-                    <WorkRow slug={w.slug} title={w.title} summary={w.summary} index={i} isConcept tags={w.stack} />
+                    <WorkRow item={w} index={i} isConcept />
                   </Reveal>
                 ))}
               </ol>
@@ -77,32 +79,28 @@ export default function WorkPage() {
 }
 
 function WorkRow({
-  slug,
-  title,
-  summary,
+  item,
   index,
   isConcept,
-  tags,
 }: {
-  slug: string;
-  title: string;
-  summary: string;
+  item: WorkItem;
   index: number;
   isConcept: boolean;
-  tags: string[];
 }) {
   return (
     <Link
-      href={`/work/${slug}`}
-      className="group grid gap-x-8 gap-y-4 py-8 transition-colors hover:bg-[var(--surface-2)] md:grid-cols-[200px_1fr]"
+      href={`/work/${item.slug}`}
+      className="group grid gap-x-8 gap-y-5 py-8 transition-colors hover:bg-[var(--surface-2)] md:grid-cols-[200px_1fr]"
     >
       <div>
-        <div className="flex items-center gap-3">
+        {/* The item's plate, drawn from its own metadata — see plateArt.ts. */}
+        <CompositionPlate item={item} index={index} variant="compact" />
+        <div className="mt-4 flex items-center gap-3">
           <span className="meta">{String(index + 1).padStart(2, "0")}</span>
           {isConcept ? <Chip>Concept · self-initiated</Chip> : <Chip className="!border-[var(--ok)] !text-[var(--ok)]">Client work</Chip>}
         </div>
         <ul className="mt-4 space-y-1.5">
-          {tags.map((t) => (
+          {item.stack.map((t) => (
             <li key={t} className="flex items-start gap-2 text-[13px] text-[var(--ink-3)]">
               <Tick tone="muted" />
               {t}
@@ -111,8 +109,8 @@ function WorkRow({
         </ul>
       </div>
       <div>
-        <h3 className="display-h3 text-[19px] transition-colors group-hover:text-[var(--accent)]">{title}</h3>
-        <p className="mt-2 max-w-[68ch] text-[14.5px] leading-relaxed text-[var(--ink-2)]">{summary}</p>
+        <h3 className="display-h3 text-[19px] transition-colors group-hover:text-[var(--accent)]">{item.title}</h3>
+        <p className="mt-2 max-w-[68ch] text-[14.5px] leading-relaxed text-[var(--ink-2)]">{item.summary}</p>
         <span className="mt-4 inline-flex items-center gap-2 text-[13.5px] font-semibold text-[var(--accent)]">
           Read case study
           <span aria-hidden className="transition-transform duration-300 group-hover:translate-x-1">
