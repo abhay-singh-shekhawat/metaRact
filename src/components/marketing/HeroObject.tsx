@@ -1,6 +1,13 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import {
+  FOLLOWS_LABEL,
+  SAMPLE_REF,
+  SAMPLE_TITLE,
+  SCOPE_STEPS as STEPS,
+  SHEET_NOTE,
+} from "@/components/marketing/scopeStack";
 
 /* ---------------------------------------------------------------------------
  * The signature dimensional object (DESIGN.md §2, §5).
@@ -8,14 +15,12 @@ import { useEffect, useRef } from "react";
  * Brief -> Scope -> Quote -> Handover — as a stack of spec sheets with real
  * depth. Pointer tilt is desktop + fine-pointer only; every other environment
  * gets the same content as a flat, readable stack.
+ *
+ * This is now the fallback for hero/HeroStage, which upgrades capable desktops
+ * to the WebGL drafting object. It also defines the stage's box, so the upgrade
+ * costs no layout shift, and it stays in the DOM so the four documents remain
+ * available to assistive technology.
  * ------------------------------------------------------------------------- */
-
-const STEPS = [
-  { n: "01", label: "Brief", k: "What you send", v: "Two paragraphs in plain language — no tech knowledge required." },
-  { n: "02", label: "Scope", k: "What we write", v: "Deliverables, exclusions and assumptions, agreed in writing." },
-  { n: "03", label: "Quote", k: "What it costs", v: "Priced by a human after the scope, never before it." },
-  { n: "04", label: "Handover", k: "What you keep", v: "Source, design files or exports — whatever the quote promised." },
-] as const;
 
 const BASE_RX = 5;
 const BASE_RY = -13;
@@ -89,10 +94,10 @@ export function HeroObject() {
                     <span className="meta text-[var(--accent)]">
                       {step.n} / {step.label.toUpperCase()}
                     </span>
-                    <span className="chip">REQ-2026-000042</span>
+                    <span className="chip">{SAMPLE_REF}</span>
                   </div>
-                  <p className="display-h3 mt-5 text-[19px]">Landing page for a new clinic</p>
-                  <p className="meta mt-6 mb-2">What follows your brief</p>
+                  <p className="display-h3 mt-5 text-[19px]">{SAMPLE_TITLE}</p>
+                  <p className="meta mt-6 mb-2">{FOLLOWS_LABEL}</p>
                   <dl className="grid gap-0 border-t border-[var(--line)]">
                     {STEPS.slice(1).map((row) => (
                       <div key={row.n} className="grid grid-cols-[86px_1fr] items-start gap-4 border-b border-[var(--line)] py-3">
@@ -101,7 +106,7 @@ export function HeroObject() {
                       </div>
                     ))}
                   </dl>
-                  <p className="meta mt-auto pt-4">Human-reviewed · one reply, from a person</p>
+                  <p className="meta mt-auto pt-4">{SHEET_NOTE}</p>
                 </div>
               ) : (
                 // The exposed right edge of each deeper document. Decorative only:

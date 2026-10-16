@@ -74,6 +74,15 @@ product photograph. The duality is intentional and scoped: the black register is
 used for *moments* (the hero object, the final CTA), never for whole page bodies,
 and never mixed within a single section.
 
+**Where it opens today — the hero light box.** The hero's 3D object sits in a stage
+that paints nothing in the paper register, so the object reads against the page's own
+paper exactly as the CSS fallback does. The `Product / Blueprint` control opens the
+register *inside that box only*: the four sheets redraw as cobalt construction
+drawings on near-black, and pull apart so all four documents are legible at once.
+It is the one interactive register change on the site, it is a real keyboard-operable
+control (`aria-pressed`), and it never alters the surrounding page's typography,
+contrast or layout.
+
 ## 3. Dials
 
 | Dial | Value | Meaning |
@@ -152,7 +161,11 @@ hero counts as one. If a section does not need a category label, it does not get
 stay server components; any primitive that needs pointer/observer behaviour lives
 in its own `"use client"` leaf under `src/components/motion/` or
 `src/components/marketing/` (`Reveal`, `HeroObject`, `ProcessRail`, `Tilt`,
-`Magnetic`, `DraftingLamp`).
+`Magnetic`, `DraftingLamp`, `hero/HeroStage`, `hero/DraftingScene`).
+
+Hero content lives in `src/components/marketing/scopeStack.ts` and is imported by
+both renderings of the object — the CSS fallback and the WebGL scene — so the
+picture and its accessible text can never drift apart.
 
 Client leaves may wrap server-rendered children (passed as props); they must never
 import server-only code.
@@ -184,9 +197,37 @@ Brand motion identity — **Premium**.
 
 **Tool selection (cheapest that works):** CSS transitions/animations for hover,
 state, entry and predetermined motion; small rAF springs for pointer-coupled
-motion; a library (`motion`) only where it earns its bundle — layout animation,
-interruption, scroll-linked values, 3D objects. Do not pull a library in for a
-fade or a nudge.
+motion; a library only where it earns its bundle — 3D objects, layout animation,
+interruption, scroll-linked values. Do not pull a library in for a fade or a nudge.
+
+### 6.1 The dimensional layer (`three` + `@react-three/fiber`)
+
+Governed by the same rules as everything else; the medium changes, the standard
+does not.
+
+- **Progressive enhancement, not replacement.** The server renders the CSS stack
+  (`HeroObject`) exactly as before. `hero/HeroStage` then decides whether the device
+  can afford the scene, and lazy-mounts it only if it can. The fallback stays in the
+  DOM underneath: it defines the box (so upgrading costs **zero layout shift**) and
+  it keeps four real documents in the accessibility tree, where pixels would be
+  silent.
+- **Gate (all must pass):** `min-width: 1024px`, `(hover: hover) and (pointer: fine)`,
+  `prefers-reduced-motion: no-preference`, `navigator.connection.saveData` unset, and
+  a working WebGL context. Otherwise the visitor keeps the CSS object. The scene is
+  never mounted under reduced motion — the animation is not merely paused.
+- **No runtime asset fetches.** Geometry is generated in code and the sheets' type is
+  painted to a `<canvas>` with the fonts `next/font` already self-hosts. No model,
+  texture, HDRI or font file is requested at runtime, so `default-src 'self'` holds
+  and there is nothing to download but the JS.
+- **Budget:** lazy chunk, never in First Load JS. `dpr={[1, 1.75]}`. The render loop
+  switches to `demand` the moment the stage leaves the viewport, so a hero that has
+  scrolled away costs nothing. Two lights and a rim; one 1024² shadow map.
+- **Motion:** one slow idle drift, pointer parallax damped at ~4.5 s⁻¹, and a camera
+  dolly that pulls back as the stack opens so the widened fan always fits the frame.
+  Nothing spins, nothing loops on a short cycle, nothing hijacks scroll.
+- **Text is painted, not modelled.** A `<CanvasTexture>` per sheet face, drawn at
+  1024 × 798, reproduces the spec sheet in both registers from one painter — which is
+  what makes the blueprint toggle read as *the same document, redrawn*.
 
 **Reduced motion is non-negotiable.** Every animation is either gated behind
 `@media (prefers-reduced-motion: no-preference)` in CSS or short-circuited in JS
@@ -198,9 +239,10 @@ to `(hover: hover) and (pointer: fine)`.
 
 Breakpoints: `sm 640`, `md 768`, `lg 1024`, `xl 1280`.
 Rules: every multi-column layout declares its `<768px` collapse; the hero uses
-`min-h-[100dvh]`-free height (no full-viewport lock); the signature 3D object is
-replaced by a flat stack below `md` and on coarse pointers; nav renders on one
-line to `1024` then collapses to a full-screen sheet; nothing may introduce
+`min-h-[100dvh]`-free height (no full-viewport lock); the signature object falls
+back to a flat stack below `lg` and on every device the WebGL gate rejects
+(coarse pointer, reduced motion, data-saver, no WebGL) — see §6.1; nav renders on
+one line to `1024` then collapses to a full-screen sheet; nothing may introduce
 horizontal scroll (`document.scrollWidth === clientWidth` is asserted in the QA sweep).
 
 ## 8. Accessibility constraints
@@ -228,13 +270,19 @@ width, **no console errors**, and **one `<h1>` per page**.
 
 ## 10. Accepted debt
 
-1. **No runtime animation dependency yet.** v2 relaxes the original "no new runtime
-   dependency" rule only where it pays: Phase 1's pointer effects (magnetic CTA,
-   drafting lamp, tilt) are CSS and ~30-line rAF springs, so homepage First Load JS
-   is unchanged. The dimensional layer introduces `motion` and `three` +
-   `@react-three/fiber` + `@react-three/drei` in later phases, **lazy-loaded and off
-   the initial route bundle**. Any library added must be justified against its
-   measured bundle cost.
+1. **Runtime animation dependencies, measured — not assumed.** v2 relaxes the
+   original "no new runtime dependency" rule only where it pays.
+   - Phase 1's pointer effects (magnetic CTA, drafting lamp, tilt) stayed CSS and
+     ~30-line rAF springs. Measured: adding `motion` cost **+48 kB First Load JS** on
+     the homepage for a 6 px nudge, so it was removed. Homepage First Load JS is
+     unchanged by Phase 1.
+   - Phase 2 adds **`three` + `@react-three/fiber`** (plus `@types/three` as a dev
+     type dependency) for the hero object, nothing else. Measured: homepage First
+     Load JS **109 → 111 kB**; the 3D runtime sits in its own lazy chunks and appears
+     in no route's First Load JS. `@react-three/drei` was **not** adopted — its useful
+     pieces (environment presets, 3D text) fetch remote assets, which the CSP forbids.
+     `@react-three/postprocessing` remains optional and uninstalled.
+   - Any further library must be justified the same way: measure it, then decide.
 2. **No icon library.** Still deliberate. Icons are typographic glyphs and simple
    geometric SVG marks only.
 3. **Single light theme + scoped studio-black register** (§2.2). No user-facing theme

@@ -7,7 +7,7 @@ import { ButtonLink, Card, Chip, Eyebrow, Panel, Section, SectionHeading, Tick }
 import { Reveal } from "@/components/motion/Reveal";
 import { Magnetic } from "@/components/motion/Magnetic";
 import { DraftingLamp } from "@/components/motion/DraftingLamp";
-import { HeroObject } from "@/components/marketing/HeroObject";
+import { HeroStage } from "@/components/marketing/hero/HeroStage";
 
 export const metadata: Metadata = {
   title: `${siteConfig.studioName} — Websites, Software, Design & AI`,
@@ -60,7 +60,7 @@ export default function HomePage() {
           </div>
 
           <div className="relative">
-            <HeroObject />
+            <HeroStage />
           </div>
         </div>
       </section>

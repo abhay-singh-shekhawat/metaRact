@@ -703,6 +703,150 @@ body {
   }
 
   /* ==========================================================================
+     Hero stage — the light box the drafting object sits on (DESIGN.md §2.2)
+
+     Paper mode is deliberately silent: the stage paints nothing, so the object
+     reads against the page's own paper exactly as the CSS fallback does. The
+     blueprint toggle is the one place the studio-black register opens, and it
+     opens only inside this box.
+     ========================================================================== */
+
+  .hero-stage {
+    position: relative;
+    isolation: isolate;
+  }
+
+  .hero-stage-bg,
+  .hero-stage-grid {
+    position: absolute;
+    inset: -1rem;
+    border-radius: 24px;
+    pointer-events: none;
+    z-index: 0;
+    transition: opacity var(--t-slow) var(--ease-out);
+  }
+
+  .hero-stage-bg {
+    background-color: var(--studio);
+    box-shadow: 0 40px 90px -60px rgba(6, 8, 13, 0.95);
+    opacity: 0;
+  }
+
+  .hero-stage-grid {
+    background-image:
+      linear-gradient(to right, rgba(122, 146, 255, 0.16) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(122, 146, 255, 0.16) 1px, transparent 1px);
+    background-size: 48px 48px;
+    opacity: 0;
+  }
+
+  .hero-stage[data-mode="blueprint"] .hero-stage-bg,
+  .hero-stage[data-mode="blueprint"] .hero-stage-grid {
+    opacity: 1;
+  }
+
+  /* The CSS stack defines the box; the WebGL object then fades in over it, so
+     the upgrade costs no layout shift. It stays in the accessibility tree. */
+  .hero-stage-poster {
+    position: relative;
+    z-index: 1;
+    transition: opacity var(--t-slow) var(--ease-out);
+  }
+
+  .hero-stage-poster.is-hidden {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .hero-stage-scene {
+    position: absolute;
+    inset: -1rem;
+    z-index: 1;
+    pointer-events: none;
+    animation: page-in var(--t-slow) var(--ease-out) both;
+  }
+
+  .hero-stage-controls {
+    position: absolute;
+    inset: 0.25rem 0.5rem 0.5rem;
+    z-index: 2;
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 1rem;
+    pointer-events: none;
+  }
+
+  .hero-stage-caption {
+    align-self: flex-start;
+    transition: color var(--t-base) var(--ease-out);
+  }
+
+  .hero-stage[data-mode="blueprint"] .hero-stage-caption {
+    color: rgba(255, 255, 255, 0.55);
+  }
+
+  .hero-viewswitch {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    padding: 3px;
+    border-radius: 999px;
+    border: 1px solid var(--line-2);
+    background: rgba(255, 255, 255, 0.72);
+    backdrop-filter: blur(10px);
+    pointer-events: auto;
+    transition:
+      border-color var(--t-base) var(--ease-out),
+      background-color var(--t-base) var(--ease-out);
+  }
+
+  .hero-viewswitch button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 34px;
+    padding-inline: 0.9rem;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--ink-2);
+    cursor: pointer;
+    transition:
+      color var(--t-fast) var(--ease-out),
+      background-color var(--t-fast) var(--ease-out);
+  }
+
+  .hero-viewswitch button:hover {
+    color: var(--ink);
+  }
+
+  .hero-viewswitch button[aria-pressed="true"] {
+    background: var(--ink);
+    color: #fff;
+  }
+
+  .hero-stage[data-mode="blueprint"] .hero-viewswitch {
+    border-color: rgba(255, 255, 255, 0.22);
+    background: rgba(12, 16, 24, 0.72);
+  }
+
+  .hero-stage[data-mode="blueprint"] .hero-viewswitch button {
+    color: rgba(255, 255, 255, 0.72);
+  }
+
+  .hero-stage[data-mode="blueprint"] .hero-viewswitch button:hover {
+    color: #fff;
+  }
+
+  .hero-stage[data-mode="blueprint"] .hero-viewswitch button[aria-pressed="true"] {
+    background: #fff;
+    color: var(--studio);
+  }
+
+  /* ==========================================================================
      Admin console
      ========================================================================== */
 
