@@ -45,20 +45,50 @@ Deliberate inversions of the incumbent look:
   shows the sequence Brief → Scope → Quote → Handover, which is literally what the
   studio sells.
 
+### 2.1 Ink & Spec in 3D (v2 — dimensional layer)
+
+Every premium agency site is **dark neon glass** — glow, gradients, particles,
+aurora. We go the other way, and that inversion is the differentiator:
+
+> **A matte product-render aesthetic.** Paper-white surfaces, hairline ink edges,
+> cobalt accents, one warm key light, subtle film grain — a precision instrument
+> photographed on a drafting table.
+
+**Coherence is the standard.** One idea carried through, not four effects stacked
+(Awwwards: Studio K95). A 3D portfolio becomes a tech demo the moment it is all
+camera and no work.
+
+- **Dimensional elements are intentional, never decorative.** Every 3D object must
+  explain or demonstrate something the studio actually sells. No floating cubes,
+  no ambient particle fields, no meteors, no glow-for-glow's-sake.
+- **Reference:** DREIRAUM's blueprint-view hero (hold to reveal the wireframe) is the
+  closest fit to the drafting-table language.
+- **Rejected in 3D too:** neon, bloom-heavy gradients, glassmorphism, particle
+  fields, purple/teal "AI" palettes, CDN-hosted assets.
+
+### 2.2 Two registers (light + studio-black)
+
+The site runs one locked **light** theme by default. Signature moments may open a
+deliberate **studio-black** register — full-bleed near-black sections lit like a
+product photograph. The duality is intentional and scoped: the black register is
+used for *moments* (the hero object, the final CTA), never for whole page bodies,
+and never mixed within a single section.
+
 ## 3. Dials
 
 | Dial | Value | Meaning |
 |---|---|---|
 | `DESIGN_VARIANCE` | 8 | Asymmetric grids, offset stacking, generous empty zones |
-| `MOTION_INTENSITY` | 6 | Fluid CSS, pointer-tilt depth, scroll reveals — no hijacking |
+| `MOTION_INTENSITY` | 8 | Fluid CSS, pointer depth, scroll reveals, one WebGL signature object — no hijacking |
 | `VISUAL_DENSITY` | 4 | Comfortable marketing rhythm; tighter only inside `/admin` |
+| `DIMENSION` | 7 | One real 3D object per surface with product-render lighting; never decorative particles |
 
 ## 4. Tokens
 
 Sourced in `src/styles/globals.css` (`@theme` + `:root`). Do not hard-code a hex
 outside that file; use the CSS variable.
 
-### 4.1 Colour — one locked light theme
+### 4.1 Colour — one locked light theme (+ studio-black register)
 
 | Token | Value | Use |
 |---|---|---|
@@ -74,15 +104,19 @@ outside that file; use the CSS variable.
 | `--accent` | `#2A3CF0` | Links, markers, focus ring, eyebrows |
 | `--accent-2` | `#1B2BC4` | Accent hover |
 | `--accent-soft` | `#E9ECFF` | Accent wash (selection, chips) |
+| `--studio` | `#06080D` | Signature studio-black register (§2.2) |
+| `--studio-2` | `#0C1018` | Raised surfaces inside the black register |
+| `--studio-line` | `rgba(255,255,255,.12)` | Hairlines on black |
 | `--ok` | `#0B7A47` | Confirmed / delivered |
 | `--warn` | `#8A5300` | Draft / notice |
 | `--danger` | `#B42318` | Errors, honeypot-free validation |
 
-Legacy aliases (`--bg`, `--border`, `--action`, `--action-hover`, `--ink-2`) are
-kept because admin and form components reference them. Same values, one system.
+Legacy aliases (`--bg`, `--border`, `--action`, `--action-hover`) are kept because
+admin and form components reference them. Same values, one system.
 
 **Rules:** one accent, never a second hue. Status colour is never the only signal
 (a label or glyph always accompanies it). No pure `#000` / `#FFF` for ink or paper.
+The studio-black register is opt-in per section, never a page-wide theme.
 
 ### 4.2 Type
 
@@ -114,9 +148,14 @@ hero counts as one. If a section does not need a category label, it does not get
 ## 5. Primitives (`src/components/ui/primitives.tsx`)
 
 `Section`, `SectionHeading`, `Eyebrow`, `PageHero`, `Card`, `Panel`, `Chip`,
-`ButtonLink`, `Rule`, `Stat`, `GridBackdrop`. Data-fetching wrappers around them
+`ButtonLink`, `Rule`, `Stat`, `Tick`, `Dash`. Data-fetching wrappers around them
 stay server components; any primitive that needs pointer/observer behaviour lives
-in its own `"use client"` leaf (`Reveal`, `HeroObject`, `ProcessRail`, `ServiceTilt`).
+in its own `"use client"` leaf under `src/components/motion/` or
+`src/components/marketing/` (`Reveal`, `HeroObject`, `ProcessRail`, `Tilt`,
+`Magnetic`, `DraftingLamp`).
+
+Client leaves may wrap server-rendered children (passed as props); they must never
+import server-only code.
 
 ## 6. Motion
 
@@ -124,15 +163,36 @@ Brand motion identity — **Premium**.
 
 - Signature easing `--ease-out: cubic-bezier(.16,1,.3,1)`; exits `--ease-in: cubic-bezier(.5,0,1,.5)`.
 - Durations `--t-fast: 160ms`, `--t-base: 320ms`, `--t-slow: 560ms`.
-- Entrance = decelerate; exit = accelerate. Transform/opacity only.
+- Entrance = decelerate; exit = accelerate. **Transform/opacity only** — never
+  `width`/`height`/`top`/`left`/`margin`.
 - Scroll reveal: `opacity 0→1`, `translateY(14px→0)`, 60 ms stagger, fires once.
 - Pointer tilt: max `±6°`, damped, desktop + fine-pointer only.
 - Hover feedback on interactive cards; `:active` presses `1px`.
+- **Page enter:** opacity-only fade (240–320 ms, `--ease-out`). Deliberately **no
+  transform** on the page wrapper: a transformed ancestor breaks `position: sticky`,
+  which the sidebars on `/start-project`, `/services/[slug]`, `/work/[slug]` and
+  `ProcessRail` rely on.
+- **Magnetic CTA:** primary actions drift toward the pointer by ≤6 px, eased with a
+  small hand-rolled rAF spring (exponential follow, no overshoot) and written as a
+  full `translate3d()` string. Released back to origin on leave. Fine-pointer +
+  hover only. Hand-rolled rather than pulling in an animation library: the library
+  measured at **+48 kB First Load JS** on the homepage versus ~30 lines for the effect.
+- **Drafting lamp:** a single soft cobalt light tracks the pointer across the hero
+  grid. One absolutely-positioned element moved by `transform` only (no gradient
+  repaint per frame). At rest it sits where the original static wash sat, so coarse
+  pointers and no-JS get the same static look.
+
+**Tool selection (cheapest that works):** CSS transitions/animations for hover,
+state, entry and predetermined motion; small rAF springs for pointer-coupled
+motion; a library (`motion`) only where it earns its bundle — layout animation,
+interruption, scroll-linked values, 3D objects. Do not pull a library in for a
+fade or a nudge.
 
 **Reduced motion is non-negotiable.** Every animation is either gated behind
 `@media (prefers-reduced-motion: no-preference)` in CSS or short-circuited in JS
-via `matchMedia`. The global `reduce` block additionally zeroes transition and
-animation durations.
+via `matchMedia` / `useReducedMotion`. The global `reduce` block additionally zeroes
+transition and animation durations. Pointer-reactive effects are additionally gated
+to `(hover: hover) and (pointer: fine)`.
 
 ## 7. Responsive
 
@@ -149,7 +209,9 @@ horizontal scroll (`document.scrollWidth === clientWidth` is asserted in the QA 
 - Minimum target `44px`. Form labels always above inputs; errors below, tied by `aria-describedby`.
 - Body contrast ≥ 4.5:1; headings ≥ 7:1 (`--ink-2` on `--canvas` = 7.4:1; white on `--ink` = 18.9:1).
 - Status never colour-only. Motion never the only carrier of meaning.
-- Admin retains `no-store` caching and its server-side auth checks untouched.
+- Decorative motion (lamp, tilt, ornament) is `aria-hidden` and keyboard-irrelevant;
+  it must never gate a function. Admin retains `no-store` caching and its
+  server-side auth checks untouched.
 
 ## 9. Test contract (must not break)
 
@@ -161,15 +223,24 @@ privacy checkbox, `Submit enquiry`), the success copy (`Request received`, `REQ-
 and in admin: heading `Overview`, `Change status`, `Update status`, `Saved.`,
 `internal note`, `Add note`, `email`/`password`/`sign in`.
 
+Also asserted, and never to regress: **zero horizontal overflow** at every tested
+width, **no console errors**, and **one `<h1>` per page**.
+
 ## 10. Accepted debt
 
-1. **No icon library.** Deliberate: no new runtime dependency. Icons are typographic
-   glyphs and simple geometric SVG marks only. A future icon set would be a single
-   swap in the primitives layer.
-2. **Single light theme.** Trust-first B2B plus an operational console; no dark mode.
-   Tokens are theme-ready (`:root` only) if that changes.
-3. **Web fonts fetched at build** (`Bricolage Grotesque`, `Geist` via `next/font`),
+1. **No runtime animation dependency yet.** v2 relaxes the original "no new runtime
+   dependency" rule only where it pays: Phase 1's pointer effects (magnetic CTA,
+   drafting lamp, tilt) are CSS and ~30-line rAF springs, so homepage First Load JS
+   is unchanged. The dimensional layer introduces `motion` and `three` +
+   `@react-three/fiber` + `@react-three/drei` in later phases, **lazy-loaded and off
+   the initial route bundle**. Any library added must be justified against its
+   measured bundle cost.
+2. **No icon library.** Still deliberate. Icons are typographic glyphs and simple
+   geometric SVG marks only.
+3. **Single light theme + scoped studio-black register** (§2.2). No user-facing theme
+   switch; the console stays light.
+4. **Web fonts fetched at build** (`Bricolage Grotesque`, `Geist` via `next/font`),
    self-hosted at runtime. `adjustFontFallback` keeps CLS at zero; the system stack
    is the declared fallback.
-4. **`/admin` shares the marketing chrome.** A distinct shell is a product decision,
+5. **`/admin` shares the marketing chrome.** A distinct shell is a product decision,
    not a styling one; the console gets its own sub-navigation instead.

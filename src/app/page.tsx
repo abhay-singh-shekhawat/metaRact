@@ -5,6 +5,8 @@ import { approvedWork } from "@/config/work";
 import { siteConfig } from "@/config/site";
 import { ButtonLink, Card, Chip, Eyebrow, Panel, Section, SectionHeading, Tick } from "@/components/ui/primitives";
 import { Reveal } from "@/components/motion/Reveal";
+import { Magnetic } from "@/components/motion/Magnetic";
+import { DraftingLamp } from "@/components/motion/DraftingLamp";
 import { HeroObject } from "@/components/marketing/HeroObject";
 
 export const metadata: Metadata = {
@@ -35,11 +37,7 @@ export default function HomePage() {
       {/* ── Hero ──────────────────────────────────────────────────────────── */}
       <section className="relative overflow-hidden border-b border-[var(--line)] bg-[var(--surface)]">
         <div aria-hidden className="grid-backdrop pointer-events-none absolute inset-0 opacity-60" />
-        <div
-          aria-hidden
-          className="pointer-events-none absolute -left-40 top-[-160px] h-[520px] w-[520px] rounded-full"
-          style={{ background: "radial-gradient(circle, rgba(42,60,240,0.12), transparent 66%)" }}
-        />
+        <DraftingLamp />
         <div className="container-studio relative grid items-center gap-12 pt-14 pb-16 md:pt-20 md:pb-24 lg:grid-cols-[1.05fr_0.95fr]">
           <div>
             <Chip className="!border-[var(--line-2)]">
@@ -51,7 +49,9 @@ export default function HomePage() {
               {siteConfig.heroSubtitle} You don&apos;t need to know the tech — describe the outcome.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
-              <ButtonLink href="/start-project">{siteConfig.primaryCta}</ButtonLink>
+              <Magnetic>
+                <ButtonLink href="/start-project">{siteConfig.primaryCta}</ButtonLink>
+              </Magnetic>
               <ButtonLink href="/work" variant="secondary">
                 {siteConfig.secondaryCta}
               </ButtonLink>
@@ -322,9 +322,11 @@ export default function HomePage() {
                 ))}
               </ol>
               <div className="mt-9 flex justify-center">
-                <Link href="/start-project" className="btn-onink !min-h-[48px] !px-7 !text-[15px]">
-                  {siteConfig.primaryCta}
-                </Link>
+                <Magnetic>
+                  <Link href="/start-project" className="btn-onink !min-h-[48px] !px-7 !text-[15px]">
+                    {siteConfig.primaryCta}
+                  </Link>
+                </Magnetic>
               </div>
             </Panel>
           </Reveal>

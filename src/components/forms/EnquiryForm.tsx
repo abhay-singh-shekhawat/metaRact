@@ -346,7 +346,7 @@ export function EnquiryForm({ preselected }: { preselected?: string }) {
           </div>
           <fieldset className="mt-4">
             <legend className="text-[14px] font-semibold">Needed features</legend>
-            <div className="mt-2 grid grid-cols-2 gap-2 text-[14px]">
+            <div className="mt-2 grid grid-cols-1 gap-2 text-[14px] min-[375px]:grid-cols-2">
               {[["contact_form","Contact form"],["booking","Booking"],["authentication","Login / accounts"],["payments","Payments"],["cms","CMS"],["api_integration","API integration"],["multilingual","Multiple languages"],["other","Other"]].map(([v,l]) => (
                 <label key={v} className="check-tile"><input type="checkbox" name="sd_features" value={v} className="h-4 w-4 accent-[var(--accent)]" />{l}</label>
               ))}
@@ -465,7 +465,7 @@ export function EnquiryForm({ preselected }: { preselected?: string }) {
           <legend className="px-1 text-[14px] font-semibold">Design assets (optional)</legend>
           <fieldset>
             <legend className="text-[14px] font-semibold">Asset types</legend>
-            <div className="mt-2 grid grid-cols-2 gap-2 text-[14px]">
+            <div className="mt-2 grid grid-cols-1 gap-2 text-[14px] min-[375px]:grid-cols-2">
               {[["social_media","Social media"],["poster_flyer","Poster / flyer"],["brochure","Brochure"],["brand_identity","Brand identity"],["digital_invitation","Digital invitation"],["presentation","Presentation"],["campaign_assets","Campaign assets"],["other","Other"]].map(([v,l]) => (
                 <label key={v} className="check-tile"><input type="checkbox" name="sd_assetTypes" value={v} className="h-4 w-4 accent-[var(--accent)]" />{l}</label>
               ))}

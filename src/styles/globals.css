@@ -44,6 +44,11 @@
   --accent-2: #1b2bc4;
   --accent-soft: #e9ecff;
 
+  /* Studio-black register — signature moments only (DESIGN.md §2.2) */
+  --studio: #06080d;
+  --studio-2: #0c1018;
+  --studio-line: rgba(255, 255, 255, 0.12);
+
   /* Status */
   --ok: #0b7a47;
   --ok-soft: #e7f5ee;
@@ -237,6 +242,17 @@ body {
     border: 1px solid var(--line);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-rest);
+  }
+
+  /* Grid/flex children default to `min-width: auto`, and a <fieldset> defaults
+     to `min-inline-size: min-content`. A long unbreakable child (a <select>, a
+     fieldset) then pushes a card past the viewport on small phones — 50px of
+     horizontal scroll on /start-project at 320px. Letting these shrink contains
+     the layout without clipping anything. */
+  .card,
+  .panel,
+  .field-group {
+    min-width: 0;
   }
 
   .card-pad {
@@ -599,6 +615,28 @@ body {
     );
   }
 
+  /* Drafting lamp — one soft cobalt light that tracks the pointer across the
+     hero grid. Transform-only movement, so no gradient repaint per frame
+     (DESIGN.md §6). At rest it sits where the old static wash sat, so coarse
+     pointers and no-JS keep an identical static look. */
+  .drafting-lamp {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 620px;
+    height: 620px;
+    margin: -310px 0 0 -310px;
+    border-radius: 999px;
+    background: radial-gradient(
+      circle,
+      rgba(42, 60, 240, 0.16),
+      rgba(42, 60, 240, 0.05) 42%,
+      transparent 68%
+    );
+    transform: translate3d(var(--lamp-x, 220px), var(--lamp-y, 100px), 0);
+    will-change: transform;
+  }
+
   /* ==========================================================================
      Scroll reveal (JS adds .is-in via IntersectionObserver)
      ========================================================================== */
@@ -707,6 +745,15 @@ body {
   }
 }
 
+@keyframes page-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
 @media (prefers-reduced-motion: no-preference) {
   .rise {
     animation: rise var(--t-slow) var(--ease-out) both;
@@ -714,5 +761,12 @@ body {
 
   .drift {
     animation: drift 9s var(--ease-inout) infinite;
+  }
+
+  /* Page enter — opacity only. A transform on the page wrapper would create a
+     containing block and break the `position: sticky` sidebars inside pages
+     (/start-project, /services/[slug], /work/[slug], ProcessRail) — DESIGN.md §6. */
+  .page-enter {
+    animation: page-in var(--t-base) var(--ease-out) both;
   }
 }
