@@ -220,7 +220,10 @@ Brand motion identity — **Premium**.
 - **Process register:** progress through the sequence comes from one
   `IntersectionObserver` band at the viewport centre — still no scroll listeners.
   Each step passed files a numbered sheet behind the current document in a sticky
-  CSS-3D pile, and the same index drives the rail and the small-screen meter. Only
+  CSS-3D pile, and the same index drives the rail and the small-screen meter. The
+  current sheet names itself — number, step name, gauge — rather than footing with
+  `STEP n / 06`, which would only restate the gauge sitting beside it; the sheet is
+  a fixed 4:3 block, so the name costs no height. Only
   `transform` and `opacity` change, so it stays on the compositor. The pile is
   `aria-hidden`: the index and the list already state the same progress as text, so
   the picture is a bonus and never the only carrier of meaning (§8). Every change is
@@ -276,7 +279,10 @@ back to a flat stack below `lg` and on every device the WebGL gate rejects
 (coarse pointer, reduced motion, data-saver, no WebGL) — see §6.1; nav renders on
 one line to `1024` then collapses to a full-screen sheet; the case-study plate
 prints its full chrome from `768` up and swaps to the unlabelled compact plan below
-that (any label would render about 5 px tall at a 350 px sheet); nothing may
+that (any label would render about 5 px tall at a 350 px sheet); the `/process`
+sticky column—card + fan + six index rows—is held under `500 px` so it still fits
+beneath the header on a ~620 px-tall desktop viewport, where it would otherwise
+scroll its own top off-screen; nothing may
 introduce horizontal scroll (`document.scrollWidth === clientWidth` is asserted in
 the QA sweep).
 

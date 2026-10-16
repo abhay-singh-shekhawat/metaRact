@@ -85,24 +85,29 @@ export function ProcessRail({ steps }: { steps: readonly (readonly [string, stri
 
             <span className="process-sheet process-sheet--current">
               <span className="process-sheet-num">{pad(current)}</span>
+              {/* The sheet names itself. It used to foot with "STEP 04 / 06",
+                  directly above a gauge that already means 4 of 6 — the name is
+                  the half of that pair a glance can actually use, and the sheet
+                  is a fixed 4:3 block, so swapping costs no height at all. */}
+              <span className="process-sheet-name">{label(steps[active][0])}</span>
               <span className="process-sheet-gauge">
                 <i style={{ transform: `scaleX(${current / total})` }} />
-              </span>
-              <span className="process-sheet-foot">
-                Step {pad(current)} / {pad(total)}
               </span>
             </span>
           </div>
 
           {/* The index — the map of the whole sequence. */}
-          <div className="relative mt-8 pl-6">
+          <div className="relative mt-6 pl-6">
             <span aria-hidden className="absolute left-0 top-1 bottom-1 w-px bg-[var(--line)]" />
             <span
               aria-hidden
               className="absolute left-0 top-1 w-px bg-[var(--accent)] transition-[height] duration-500"
               style={{ height: `calc((100% - 0.5rem) * ${total > 1 ? active / (total - 1) : 1})` }}
             />
-            <ol className="grid gap-3">
+            {/* gap-2.5, not gap-3: the whole column must fit under the header on a
+                ~620px-tall desktop viewport, where the card, its fan and six index
+                rows together already fill it (see DESIGN.md §7). */}
+            <ol className="grid gap-2.5">
               {steps.map(([title], i) => (
                 <li key={title} className="flex items-center gap-3">
                   <span

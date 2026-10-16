@@ -962,13 +962,13 @@ body {
     transition: transform var(--t-base) var(--ease-out);
   }
 
-  .process-sheet-foot {
-    margin-top: 0.55rem;
+  .process-sheet-name {
+    margin-top: 0.4rem;
     font-family: var(--font-mono);
     font-size: 10.5px;
     letter-spacing: 0.1em;
     text-transform: uppercase;
-    color: var(--ink-3);
+    color: var(--ink-2);
   }
 
   /* Below lg the sticky column has no room, so one bar carries the same
