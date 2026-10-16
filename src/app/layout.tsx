@@ -1,8 +1,23 @@
 import type { Metadata } from "next";
+import { Bricolage_Grotesque, Geist } from "next/font/google";
 import "../styles/globals.css";
 import { Header } from "@/components/marketing/Header";
 import { Footer } from "@/components/marketing/Footer";
 import { siteConfig } from "@/config/site";
+
+// Typography is part of the design contract (DESIGN.md §4.2): Bricolage Grotesque
+// for display, Geist for body/UI. next/font self-hosts both at build time.
+const display = Bricolage_Grotesque({
+  subsets: ["latin"],
+  variable: "--font-bricolage",
+  display: "swap",
+});
+
+const sans = Geist({
+  subsets: ["latin"],
+  variable: "--font-geist",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteConfig.siteUrl),
@@ -23,16 +38,16 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" data-scroll-behavior="smooth">
+    <html lang="en" data-scroll-behavior="smooth" className={`${display.variable} ${sans.variable}`}>
       <body>
         <a
           href="#main"
-          className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[100] focus:rounded-md focus:bg-white focus:px-4 focus:py-2 focus:text-sm focus:font-semibold"
+          className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[100] focus:rounded-md focus:bg-[var(--surface)] focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:shadow-lg"
         >
           Skip to content
         </a>
         <Header />
-        <main id="main" className="min-h-[60vh]">
+        <main id="main" className="min-h-[60vh] scroll-mt-[72px]">
           {children}
         </main>
         <Footer />

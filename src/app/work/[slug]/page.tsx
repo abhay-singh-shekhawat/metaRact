@@ -4,7 +4,8 @@ import Link from "next/link";
 import { getWork } from "@/config/work";
 import { getServiceAny } from "@/config/services";
 import { siteConfig } from "@/config/site";
-import { ButtonLink, Card, PageHero } from "@/components/ui/primitives";
+import { ButtonLink, Card, Chip, PageHero, Tick } from "@/components/ui/primitives";
+import { Reveal } from "@/components/motion/Reveal";
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
@@ -17,46 +18,97 @@ export default async function WorkDetail({ params }: { params: Promise<{ slug: s
   const { slug } = await params;
   const w = getWork(slug);
   if (!w) notFound();
+
   return (
     <>
-      <PageHero title={w.title} lead={w.summary} cta={<><ButtonLink href="/start-project">Start a similar project</ButtonLink><ButtonLink href="/work" variant="ghost">All work</ButtonLink></>} />
-      <div className="container-studio grid gap-6 py-12 lg:grid-cols-[1.5fr_1fr]">
-        <div className="space-y-6">
-          {w.isConcept && (
-            <p role="note" className="rounded-[12px] border border-[#E8C547] bg-[#FFF8E1] p-4 text-[14px] font-medium text-[#6b4e00]">
-              Concept project — a self-initiated demonstration, not client work. No client, metrics, or testimonial is implied.
-            </p>
-          )}
-          <Card>
-            <h2 className="text-[17px] font-semibold">What this demonstrates</h2>
-            <ul className="mt-3 space-y-2 text-[14.5px]">
-              {w.outcome.map((o) => (
-                <li key={o} className="flex gap-2"><span aria-hidden className="text-[#157347]">✓</span>{o}</li>
-              ))}
-            </ul>
-          </Card>
-          <Card>
-            <h2 className="text-[17px] font-semibold">Stack</h2>
-            <p className="mt-2 text-[14.5px] text-[#596273]">{w.stack.join(" · ")}</p>
-          </Card>
+      <PageHero
+        folio={`DOC 05 / ${w.slug.toUpperCase()}`}
+        title={w.title}
+        lead={w.summary}
+        meta={[
+          { k: "Type", v: w.isConcept ? "Concept — self-initiated" : "Client work" },
+          { k: "Services", v: w.serviceSlugs.map((s) => getServiceAny(s)?.title ?? s).join(", ") },
+          { k: "Published", v: w.publishedAt ?? "—" },
+        ]}
+        cta={
+          <>
+            <ButtonLink href="/start-project">Start a similar project</ButtonLink>
+            <ButtonLink href="/work" variant="secondary">
+              All work
+            </ButtonLink>
+          </>
+        }
+      />
+
+      <section className="band py-20 md:py-28">
+        <div className="container-studio grid gap-12 lg:grid-cols-[1.5fr_1fr] lg:gap-16">
+          <div className="space-y-10">
+            {w.isConcept && (
+              <p
+                role="note"
+                className="border-l-2 border-[var(--warn)] bg-[var(--warn-soft)] px-5 py-4 text-[14px] font-medium leading-relaxed text-[var(--warn)]"
+              >
+                Concept project — a self-initiated demonstration, not client work. No client, metrics, or testimonial is implied.
+              </p>
+            )}
+
+            <Reveal>
+              <h2 className="display-h2 text-[24px]">What this demonstrates</h2>
+              <ul className="mt-6 border-t border-[var(--line)]">
+                {w.outcome.map((o) => (
+                  <li key={o} className="flex items-start gap-3 border-b border-[var(--line)] py-4 text-[14.5px]">
+                    <Tick />
+                    {o}
+                  </li>
+                ))}
+              </ul>
+            </Reveal>
+
+            <Reveal>
+              <h2 className="display-h2 text-[24px]">Stack</h2>
+              <ul className="mt-5 flex flex-wrap gap-2">
+                {w.stack.map((s) => (
+                  <li key={s}>
+                    <Chip>{s}</Chip>
+                  </li>
+                ))}
+              </ul>
+            </Reveal>
+          </div>
+
+          <aside className="space-y-5 lg:sticky lg:top-28 lg:self-start">
+            <Card>
+              <p className="meta">Services used</p>
+              <ul className="mt-3 divide-y divide-[var(--line)] text-[14px]">
+                {w.serviceSlugs.map((s) => {
+                  const svc = getServiceAny(s);
+                  return (
+                    <li key={s} className="py-2.5">
+                      {svc ? (
+                        <Link className="link-inline" href={`/services/${s}`}>
+                          {svc.title}
+                        </Link>
+                      ) : (
+                        s
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            </Card>
+
+            <Card className="border-[var(--ink)] bg-[var(--ink)] text-white">
+              <p className="display-h3 text-white">Want something like this?</p>
+              <p className="mt-2 text-[14px] leading-relaxed text-white/70">
+                Describe your version — we scope and quote by hand.
+              </p>
+              <Link href="/start-project" className="btn-onink mt-5 w-full">
+                {siteConfig.primaryCta}
+              </Link>
+            </Card>
+          </aside>
         </div>
-        <aside className="space-y-5">
-          <Card>
-            <h2 className="text-[16px] font-semibold">Services used</h2>
-            <ul className="mt-2 space-y-2 text-[14px]">
-              {w.serviceSlugs.map((s) => {
-                const svc = getServiceAny(s);
-                return <li key={s}>{svc ? <Link className="text-[#315BE8] hover:underline" href={`/services/${s}`}>{svc.title}</Link> : s}</li>;
-              })}
-            </ul>
-          </Card>
-          <Card className="bg-[#151923] text-white border-[#151923]">
-            <p className="font-semibold">Want something like this?</p>
-            <p className="mt-1 text-[14px] text-white/70">Describe your version — we scope and quote by hand.</p>
-            <Link href="/start-project" className="mt-4 inline-flex min-h-[44px] items-center rounded-[10px] bg-white px-5 text-[14px] font-semibold text-[#151923]">{siteConfig.primaryCta}</Link>
-          </Card>
-        </aside>
-      </div>
+      </section>
     </>
   );
 }

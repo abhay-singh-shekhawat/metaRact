@@ -49,22 +49,42 @@ export function SignInForm({ devNote }: { devNote: boolean }) {
   }
 
   return (
-    <form onSubmit={onSubmit} className="space-y-4">
+    <form onSubmit={onSubmit} className="space-y-5">
       {devNote && (
-        <p role="note" className="rounded-[10px] bg-[#FFF8E1] p-3 text-[13.5px] text-[#6b4e00]">
+        <p
+          role="note"
+          className="rounded-[10px] border border-[var(--warn)]/25 bg-[var(--warn-soft)] p-3.5 text-[13.5px] leading-relaxed text-[var(--warn)]"
+        >
           Development sign-in — use your local operator credentials.
         </p>
       )}
-      {error && <p ref={alertRef} tabIndex={-1} role="alert" className="rounded-[10px] bg-[#FDECEA] p-3 text-[14px] font-medium text-[#7a1f18]">{error}</p>}
+
+      {error && (
+        <p
+          ref={alertRef}
+          tabIndex={-1}
+          role="alert"
+          className="rounded-[10px] border border-[var(--danger)]/30 bg-[var(--danger-soft)] p-3.5 text-[14px] font-medium text-[var(--danger)]"
+        >
+          {error}
+        </p>
+      )}
+
       <div>
-        <label htmlFor="email" className="block text-[14px] font-semibold">Email</label>
-        <input id="email" name="email" type="email" autoComplete="email" required className="mt-1.5 block w-full rounded-[10px] border border-[var(--line)] px-3.5 py-3 text-[15px]" />
+        <label htmlFor="email" className="field-label">
+          Email
+        </label>
+        <input id="email" name="email" type="email" autoComplete="email" required className="field-input" />
       </div>
+
       <div>
-        <label htmlFor="password" className="block text-[14px] font-semibold">Password</label>
-        <input id="password" name="password" type="password" autoComplete="current-password" required className="mt-1.5 block w-full rounded-[10px] border border-[var(--line)] px-3.5 py-3 text-[15px]" />
+        <label htmlFor="password" className="field-label">
+          Password
+        </label>
+        <input id="password" name="password" type="password" autoComplete="current-password" required className="field-input" />
       </div>
-      <button type="submit" disabled={loading || !mounted} className="inline-flex min-h-[48px] w-full items-center justify-center rounded-[10px] bg-[#151923] px-6 text-[15px] font-semibold text-white disabled:opacity-60">
+
+      <button type="submit" disabled={loading || !mounted} className="btn-primary w-full !min-h-[48px]">
         {loading ? "Signing in…" : "Sign in"}
       </button>
     </form>

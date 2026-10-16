@@ -76,11 +76,10 @@ function loadTurnstileScript(): Promise<void> {
   });
 }
 
-const inputCls =
-  "mt-1.5 block w-full rounded-[10px] border border-[var(--line)] bg-white px-3.5 py-3 text-[15px] text-[#151923] placeholder:text-[#8a94a8] focus:border-[#315BE8] focus:outline-none";
-const labelCls = "block text-[14px] font-semibold text-[#151923]";
-const helpCls = "mt-1 text-[13px] text-[#596273]";
-const errCls = "mt-1 text-[13.5px] font-medium text-[#b42318]";
+const inputCls = "field-input mt-1.5";
+const labelCls = "field-label";
+const helpCls = "mt-1.5 text-[13px] leading-relaxed text-[var(--ink-3)]";
+const errCls = "mt-1.5 text-[13.5px] font-medium text-[var(--danger)]";
 
 export function EnquiryForm({ preselected }: { preselected?: string }) {
   const services = enabledServices();
@@ -250,25 +249,40 @@ export function EnquiryForm({ preselected }: { preselected?: string }) {
 
   if (successRef) {
     return (
-      <div id="form-status" tabIndex={-1} role="status" className="rounded-[16px] border border-[#B9E2C6] bg-[#EDF7F0] p-8" aria-live="polite">
-        <p className="text-[19px] font-semibold text-[#14532d]">Request received — thank you.</p>
-        <p className="mt-2 text-[15px] text-[#1c5c34]">
-          Your reference number is <strong className="font-mono">{successRef}</strong>. This confirms receipt, not acceptance or a quote.
-          We&apos;ll review your brief and contact you using the details you shared.
-        </p>
-        <p className="mt-2 text-[14px] text-[#1c5c34]">Save this reference for any follow-up.</p>
+      <div
+        id="form-status"
+        tabIndex={-1}
+        role="status"
+        aria-live="polite"
+        className="rise overflow-hidden rounded-[16px] border border-[var(--ok)]/25 bg-[var(--surface)]"
+      >
+        <div className="border-b border-[var(--line)] bg-[var(--ok-soft)] px-6 py-5">
+          <p className="meta !text-[var(--ok)]">Submission confirmed</p>
+          <p className="display-h3 mt-2 text-[20px] text-[var(--ok)]">Request received — thank you.</p>
+        </div>
+        <div className="p-6">
+          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+            <span className="meta">Your reference</span>
+            <span className="font-mono text-[20px] font-semibold tracking-[0.02em]">{successRef}</span>
+          </div>
+          <p className="mt-4 max-w-[62ch] text-[14.5px] leading-relaxed text-[var(--ink-2)]">
+            This confirms receipt, not acceptance or a quote. We&apos;ll review your brief and contact you using the
+            details you shared.
+          </p>
+          <p className="mt-2 text-[14px] text-[var(--ink-2)]">Save this reference for any follow-up.</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <form onSubmit={onSubmit} noValidate aria-describedby="form-intro" className="space-y-6">
-      <p id="form-intro" className="text-[14.5px] text-[#596273]">
+    <form onSubmit={onSubmit} noValidate aria-describedby="form-intro" className="space-y-7">
+      <p id="form-intro" className="text-[14.5px] leading-relaxed text-[var(--ink-2)]">
         Plain language is fine. Fields marked * are required. We acknowledge privacy notice version {siteConfig.privacyNoticeVersion}. Please don&apos;t send passwords, keys, or sensitive data.
       </p>
 
       {topError && (
-        <div id="form-errors" tabIndex={-1} role="alert" className="rounded-[12px] border border-[#F1B8B2] bg-[#FDECEA] p-4 text-[14.5px] font-medium text-[#7a1f18]">
+        <div id="form-errors" tabIndex={-1} role="alert" className="rounded-[12px] border border-[var(--danger)]/30 bg-[var(--danger-soft)] p-4 text-[14.5px] font-medium text-[var(--danger)]">
           {topError}
         </div>
       )}
@@ -301,7 +315,7 @@ export function EnquiryForm({ preselected }: { preselected?: string }) {
 
       {/* Conditional: websites */}
       {isWeb && (
-        <fieldset className="rounded-[12px] border border-[var(--line)] bg-white p-5">
+        <fieldset className="field-group">
           <legend className="px-1 text-[14px] font-semibold">Website details (optional)</legend>
           <div className="grid gap-4 md:grid-cols-2">
             <div>
@@ -334,7 +348,7 @@ export function EnquiryForm({ preselected }: { preselected?: string }) {
             <legend className="text-[14px] font-semibold">Needed features</legend>
             <div className="mt-2 grid grid-cols-2 gap-2 text-[14px]">
               {[["contact_form","Contact form"],["booking","Booking"],["authentication","Login / accounts"],["payments","Payments"],["cms","CMS"],["api_integration","API integration"],["multilingual","Multiple languages"],["other","Other"]].map(([v,l]) => (
-                <label key={v} className="flex items-center gap-2 rounded-[8px] border border-[var(--line)] px-3 py-2.5"><input type="checkbox" name="sd_features" value={v} className="h-4 w-4 accent-[#315BE8]" />{l}</label>
+                <label key={v} className="check-tile"><input type="checkbox" name="sd_features" value={v} className="h-4 w-4 accent-[var(--accent)]" />{l}</label>
               ))}
             </div>
           </fieldset>
@@ -342,7 +356,7 @@ export function EnquiryForm({ preselected }: { preselected?: string }) {
       )}
 
       {isSoftware && (
-        <fieldset className="rounded-[12px] border border-[var(--line)] bg-white p-5">
+        <fieldset className="field-group">
           <legend className="px-1 text-[14px] font-semibold">Software details (optional)</legend>
           <div className="grid gap-4 md:grid-cols-2">
             <div>
@@ -388,7 +402,7 @@ export function EnquiryForm({ preselected }: { preselected?: string }) {
       )}
 
       {isDesign && (
-        <fieldset className="rounded-[12px] border border-[var(--line)] bg-white p-5">
+        <fieldset className="field-group">
           <legend className="px-1 text-[14px] font-semibold">Design & prototype details (optional)</legend>
           <div className="grid gap-4 md:grid-cols-3">
             <div>
@@ -418,7 +432,7 @@ export function EnquiryForm({ preselected }: { preselected?: string }) {
       )}
 
       {isAi && (
-        <fieldset className="rounded-[12px] border border-[var(--line)] bg-white p-5">
+        <fieldset className="field-group">
           <legend className="px-1 text-[14px] font-semibold">AI / automation details (optional)</legend>
           <div className="grid gap-4">
             <div>
@@ -447,13 +461,13 @@ export function EnquiryForm({ preselected }: { preselected?: string }) {
       )}
 
       {isGraph && (
-        <fieldset className="rounded-[12px] border border-[var(--line)] bg-white p-5">
+        <fieldset className="field-group">
           <legend className="px-1 text-[14px] font-semibold">Design assets (optional)</legend>
           <fieldset>
             <legend className="text-[14px] font-semibold">Asset types</legend>
             <div className="mt-2 grid grid-cols-2 gap-2 text-[14px]">
               {[["social_media","Social media"],["poster_flyer","Poster / flyer"],["brochure","Brochure"],["brand_identity","Brand identity"],["digital_invitation","Digital invitation"],["presentation","Presentation"],["campaign_assets","Campaign assets"],["other","Other"]].map(([v,l]) => (
-                <label key={v} className="flex items-center gap-2 rounded-[8px] border border-[var(--line)] px-3 py-2.5"><input type="checkbox" name="sd_assetTypes" value={v} className="h-4 w-4 accent-[#315BE8]" />{l}</label>
+                <label key={v} className="check-tile"><input type="checkbox" name="sd_assetTypes" value={v} className="h-4 w-4 accent-[var(--accent)]" />{l}</label>
               ))}
             </div>
           </fieldset>
@@ -496,18 +510,18 @@ export function EnquiryForm({ preselected }: { preselected?: string }) {
           <input id="company" name="company" type="text" autoComplete="organization" maxLength={160} className={inputCls} />
         </div>
         <div>
-          <label htmlFor="phone" className={labelCls}>Phone <span className="font-normal text-[#596273]">(optional)</span></label>
+          <label htmlFor="phone" className={labelCls}>Phone <span className="font-normal text-[var(--ink-3)]">(optional)</span></label>
           <input id="phone" name="phone" type="tel" autoComplete="tel" maxLength={40} className={inputCls} />
         </div>
         <div>
-          <label htmlFor="budget" className={labelCls}>Budget band <span className="font-normal text-[#596273]">(planning only)</span></label>
+          <label htmlFor="budget" className={labelCls}>Budget band <span className="font-normal text-[var(--ink-3)]">(planning only)</span></label>
           <select id="budget" name="budget" className={inputCls} defaultValue="">
             <option value="">Select…</option>
             {BUDGETS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
           </select>
         </div>
         <div>
-          <label htmlFor="timeline" className={labelCls}>Timeline <span className="font-normal text-[#596273]">(preference only)</span></label>
+          <label htmlFor="timeline" className={labelCls}>Timeline <span className="font-normal text-[var(--ink-3)]">(preference only)</span></label>
           <select id="timeline" name="timeline" className={inputCls} defaultValue="">
             <option value="">Select…</option>
             {TIMELINES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
@@ -521,23 +535,23 @@ export function EnquiryForm({ preselected }: { preselected?: string }) {
           </select>
         </div>
         <div>
-          <label htmlFor="preferredDate" className={labelCls}>Preferred date <span className="font-normal text-[#596273]">(optional, preference only)</span></label>
+          <label htmlFor="preferredDate" className={labelCls}>Preferred date <span className="font-normal text-[var(--ink-3)]">(optional, preference only)</span></label>
           <input id="preferredDate" name="preferredDate" type="date" className={inputCls} />
         </div>
       </div>
 
       <div>
-        <label htmlFor="referenceUrls" className={labelCls}>Reference links <span className="font-normal text-[#596273]">(up to 5, one per line)</span></label>
+        <label htmlFor="referenceUrls" className={labelCls}>Reference links <span className="font-normal text-[var(--ink-3)]">(up to 5, one per line)</span></label>
         <textarea id="referenceUrls" name="referenceUrls" rows={2} inputMode="url" placeholder="https://example.com/inspiration" className={inputCls} />
         {err("referenceUrls") && <p className={errCls}>{err("referenceUrls")}</p>}
       </div>
 
-      <div className="rounded-[12px] border border-[var(--line)] bg-white p-5">
+      <div className="rounded-[14px] border border-[var(--line)] bg-[var(--surface-2)] p-5">
         <div className="flex cursor-pointer items-start gap-3 text-[14.5px]">
-          <input id="privacy" type="checkbox" name="privacy" required aria-describedby="privacy-detail" className="mt-1 h-5 w-5 accent-[#315BE8]" />
+          <input id="privacy" type="checkbox" name="privacy" required aria-describedby="privacy-detail" className="mt-1 h-5 w-5 accent-[var(--accent)]" />
           <span>
             <label htmlFor="privacy">I have read the privacy notice and understand my brief will be used to review and respond to my enquiry. *</label>
-            <span id="privacy-detail" className="mt-1 block text-[13px] text-[#596273]">Please read the <a href="/privacy" className="font-semibold text-[#315BE8] hover:underline" target="_blank" rel="noreferrer">privacy notice</a> before submitting.</span>
+            <span id="privacy-detail" className="mt-1 block text-[13px] text-[var(--ink-3)]">Please read the <a href="/privacy" className="font-semibold text-[var(--accent)] hover:underline" target="_blank" rel="noreferrer">privacy notice</a> before submitting.</span>
           </span>
         </div>
         {err("privacyNoticeAcknowledged") && <p className={errCls}>{err("privacyNoticeAcknowledged")}</p>}
@@ -550,7 +564,7 @@ export function EnquiryForm({ preselected }: { preselected?: string }) {
           {turnstileFailed ? (
             <div className="mt-2 flex flex-wrap items-center gap-3">
               <p className={errCls}>Verification failed (code 600* — retryable). This is common on Brave / Firefox / VPN.</p>
-              <button type="button" onClick={retryTurnstile} className="rounded-[8px] border border-[var(--line)] bg-white px-4 py-2 text-[14px] font-semibold text-[#151923] hover:bg-[#F0F3F9]">
+              <button type="button" onClick={retryTurnstile} className="btn-secondary !min-h-[40px]">
                 Retry verification
               </button>
             </div>
@@ -565,7 +579,7 @@ export function EnquiryForm({ preselected }: { preselected?: string }) {
       <button
         type="submit"
         disabled={submitting || !mounted}
-        className="inline-flex min-h-[48px] w-full items-center justify-center rounded-[10px] bg-[#315BE8] px-6 text-[15px] font-semibold text-white transition-all hover:bg-[#2446BE] active:translate-y-[1px] disabled:cursor-wait disabled:opacity-60 md:w-auto"
+        className="btn-primary !min-h-[48px] w-full !text-[15px] md:w-auto"
       >
         {submitting ? "Sending… (do not double-click)" : "Submit enquiry"}
       </button>

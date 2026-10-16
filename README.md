@@ -75,8 +75,13 @@ Run the operator script (never a web endpoint):
 
 ```bash
 MONGODB_URI=... MONGODB_DB_NAME=... \
-  pnpm tsx scripts/bootstrap-admin.ts founder@studio.com 'a-strong-password-12+-chars' owner
+  pnpm bootstrap-admin founder@studio.com 'a-strong-password-12+-chars' owner
 ```
+
+The script runs with `--conditions=react-server` so the `server-only` guard in
+the app modules resolves to its no-op build under plain Node. Invoking
+`tsx scripts/bootstrap-admin.ts` directly (without that flag) fails with
+"This module cannot be imported from a Client Component module".
 
 Revoke: set `isActive=false` on the user in the `admin_users` collection and
 delete their rows in `admin_sessions` (or wait for the 12h TTL expiry).

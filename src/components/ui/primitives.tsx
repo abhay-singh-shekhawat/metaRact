@@ -1,48 +1,191 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 
-export function Section({ children, className = "" }: { children: ReactNode; className?: string }) {
-  return <section className={`py-14 md:py-20 ${className}`}>{children}</section>;
-}
+/* ---------------------------------------------------------------------------
+ * Presentation primitives — DESIGN.md §5.
+ * Server-safe. Anything needing pointer/observer behaviour is its own client
+ * leaf (Reveal, HeroObject, ProcessRail, ServiceTilt, Header).
+ * ------------------------------------------------------------------------- */
 
-export function Eyebrow({ children }: { children: ReactNode }) {
+/** Page band with the studio's vertical rhythm and a hairline top rule. */
+export function Section({
+  children,
+  className = "",
+  tone = "paper",
+  id,
+}: {
+  children: ReactNode;
+  className?: string;
+  tone?: "paper" | "surface" | "plain";
+  id?: string;
+}) {
+  const tones = {
+    paper: "band",
+    surface: "band bg-[var(--surface)]",
+    plain: "",
+  } as const;
   return (
-    <p className="text-[12px] font-semibold uppercase tracking-[0.16em] text-[#315BE8]">{children}</p>
+    <section id={id} className={`${tones[tone]} py-20 md:py-28 ${className}`}>
+      {children}
+    </section>
   );
 }
 
+/** The one small label allowed above a heading. Use sparingly (one per 3 sections). */
+export function Eyebrow({ children }: { children: ReactNode }) {
+  return <p className="eyebrow">{children}</p>;
+}
+
+/**
+ * Section header. Single message: heading, optional lead, optional right-hand
+ * action. Never a split headline/explainer (DESIGN.md §2).
+ */
+export function SectionHeading({
+  title,
+  lead,
+  eyebrow,
+  action,
+  className = "",
+}: {
+  title: ReactNode;
+  lead?: ReactNode;
+  eyebrow?: ReactNode;
+  action?: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={`flex flex-wrap items-end justify-between gap-x-8 gap-y-4 ${className}`}>
+      <div className="max-w-[46ch]">
+        {eyebrow ? <div className="mb-4">{eyebrow}</div> : null}
+        <h2 className="display-h2 text-balance">{title}</h2>
+        {lead ? <p className="mt-4 text-[15.5px] leading-relaxed text-[var(--ink-2)]">{lead}</p> : null}
+      </div>
+      {action ? <div className="shrink-0">{action}</div> : null}
+    </div>
+  );
+}
+
+export interface HeroMeta {
+  k: string;
+  v: string;
+}
+
+/**
+ * Chapter opener for every non-home route. Left: the page's message.
+ * Right: a page-specific spec rail (mono labels over hairlines) — never a
+ * repeated marketing card.
+ */
 export function PageHero({
   title,
   lead,
   cta,
+  eyebrow,
+  folio,
+  meta,
 }: {
   title: string;
   lead: string;
   cta?: ReactNode;
+  eyebrow?: ReactNode;
+  folio?: string;
+  meta?: HeroMeta[];
 }) {
+  const hasAside = Boolean(meta && meta.length > 0);
   return (
-    <div className="border-b border-[var(--line)] bg-white">
-      <div className="container-studio grid gap-8 py-12 md:grid-cols-[1.4fr_1fr] md:items-end md:py-16">
+    <header className="relative overflow-hidden border-b border-[var(--line)] bg-[var(--surface)]">
+      <div aria-hidden className="grid-backdrop pointer-events-none absolute inset-0 opacity-70" />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -right-24 -top-32 h-[420px] w-[420px] rounded-full"
+        style={{ background: "radial-gradient(circle, rgba(42,60,240,0.10), transparent 68%)" }}
+      />
+      <div
+        className={`container-studio relative grid gap-10 pt-14 pb-16 md:pt-20 md:pb-20 ${
+          hasAside ? "md:grid-cols-[1.15fr_0.85fr] md:items-end" : ""
+        }`}
+      >
         <div>
-          <h1 className="max-w-[22ch] text-4xl font-bold leading-[1.05] tracking-tight md:text-5xl">{title}</h1>
-          <p className="mt-4 max-w-[62ch] text-[16px] leading-relaxed text-[#596273]">{lead}</p>
-          {cta && <div className="mt-6 flex flex-wrap gap-3">{cta}</div>}
+          {eyebrow ? <div className="mb-5">{eyebrow}</div> : null}
+          <h1 className="display-h1 max-w-[24ch] text-balance">{title}</h1>
+          <p className="lead mt-5 max-w-[58ch]">{lead}</p>
+          {cta ? <div className="mt-7 flex flex-wrap gap-3">{cta}</div> : null}
         </div>
-        <div className="hidden md:block" aria-hidden>
-          <div className="rounded-[16px] border border-[var(--line)] bg-[#F0F3F9] p-6">
-            <p className="font-mono text-[12px] uppercase tracking-[0.14em] text-[#596273]">How we work</p>
-            <ol className="mt-3 space-y-2 text-[14px] font-medium">
-              {["Brief →", "Scope in writing →", "Human quote →", "Build & review →", "Handover"].map((s) => (
-                <li key={s} className="flex items-center gap-2">
-                  <span className="h-1.5 w-1.5 rounded-full bg-[#315BE8]" />
-                  {s}
-                </li>
-              ))}
-            </ol>
-          </div>
-        </div>
+        {hasAside ? (
+          <dl className="grid content-end gap-0 border-t border-[var(--line)]">
+            {folio ? (
+              <div className="flex items-baseline justify-between gap-6 border-b border-[var(--line)] py-3">
+                <dt className="meta">File</dt>
+                <dd className="meta text-[var(--ink)]">{folio}</dd>
+              </div>
+            ) : null}
+            {meta!.map((m) => (
+              <div key={m.k} className="flex items-baseline justify-between gap-6 border-b border-[var(--line)] py-3">
+                <dt className="meta">{m.k}</dt>
+                <dd className="max-w-[30ch] text-right text-[14px] font-medium text-[var(--ink)]">{m.v}</dd>
+              </div>
+            ))}
+          </dl>
+        ) : null}
       </div>
-    </div>
+    </header>
+  );
+}
+
+export function Rule({ className = "" }: { className?: string }) {
+  return <hr className={`rule ${className}`} />;
+}
+
+export function Card({
+  children,
+  className = "",
+  pad = true,
+}: {
+  children: ReactNode;
+  className?: string;
+  pad?: boolean;
+}) {
+  return <div className={`card ${pad ? "p-6" : ""} ${className}`}>{children}</div>;
+}
+
+export function Panel({
+  children,
+  className = "",
+  ink = false,
+}: {
+  children: ReactNode;
+  className?: string;
+  ink?: boolean;
+}) {
+  return <div className={`${ink ? "panel-ink" : "panel"} ${className}`}>{children}</div>;
+}
+
+export function Chip({ children, className = "" }: { children: ReactNode; className?: string }) {
+  return <span className={`chip ${className}`}>{children}</span>;
+}
+
+/** Small inline mark used beside verified/required facts. Geometric only. */
+export function Tick({ tone = "ok" }: { tone?: "ok" | "muted" }) {
+  return (
+    <svg
+      aria-hidden
+      viewBox="0 0 16 16"
+      className="mt-[3px] h-3.5 w-3.5 shrink-0"
+      fill="none"
+      stroke={tone === "ok" ? "var(--ok)" : "var(--ink-3)"}
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M2.5 8.5 6 12l7.5-8" />
+    </svg>
+  );
+}
+
+export function Dash() {
+  return (
+    <svg aria-hidden viewBox="0 0 16 16" className="mt-[8px] h-3 w-3 shrink-0" stroke="var(--ink-3)" strokeWidth="1.8" strokeLinecap="round">
+      <path d="M3 8h10" />
+    </svg>
   );
 }
 
@@ -50,29 +193,48 @@ export function ButtonLink({
   href,
   children,
   variant = "primary",
+  className = "",
 }: {
   href: string;
   children: ReactNode;
-  variant?: "primary" | "dark" | "ghost";
+  variant?: "primary" | "secondary" | "accent" | "onInk";
+  className?: string;
 }) {
-  const styles =
-    variant === "primary"
-      ? "bg-[#315BE8] text-white hover:bg-[#2446BE]"
-      : variant === "dark"
-        ? "bg-[#151923] text-white hover:bg-black"
-        : "border border-[var(--line)] bg-white text-[#151923] hover:bg-[#F0F3F9]";
+  const styles = {
+    primary: "btn-primary",
+    secondary: "btn-secondary",
+    accent: "btn-accent",
+    onInk: "btn-onink",
+  } as const;
   return (
-    <Link
-      href={href}
-      className={`inline-flex min-h-[44px] items-center justify-center rounded-[10px] px-5 text-[14px] font-semibold transition-all active:translate-y-[1px] ${styles}`}
-    >
+    <Link href={href} className={`${styles[variant]} ${className}`}>
       {children}
     </Link>
   );
 }
 
-export function Card({ children, className = "" }: { children: ReactNode; className?: string }) {
-  return (
-    <div className={`rounded-[16px] border border-[var(--line)] bg-white p-6 ${className}`}>{children}</div>
+/** Big number + mono label, used for real (never invented) counts. */
+export function Stat({
+  value,
+  label,
+  href,
+}: {
+  value: ReactNode;
+  label: string;
+  href?: string;
+}) {
+  const body = (
+    <>
+      <span className="display-h2 block tabular-nums">{value}</span>
+      <span className="meta mt-1 block">{label}</span>
+    </>
   );
+  if (href) {
+    return (
+      <Link href={href} className="surface-link group p-6">
+        {body}
+      </Link>
+    );
+  }
+  return <div className="panel p-6">{body}</div>;
 }

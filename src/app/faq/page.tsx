@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
-import { PageHero, ButtonLink } from "@/components/ui/primitives";
+import { ButtonLink, Eyebrow, PageHero, Section } from "@/components/ui/primitives";
+import { Reveal } from "@/components/motion/Reveal";
 
 export const metadata: Metadata = { title: "FAQ", description: "Scope, estimates, timelines, revisions, handoff, and costs." };
 
@@ -29,22 +30,50 @@ const groups: [string, [string, string][]][] = [
 export default function FaqPage() {
   return (
     <>
-      <PageHero title="Questions, answered plainly" lead="Scope, estimates, timelines, revisions, handoff, and recurring costs — without sales language." cta={<ButtonLink href="/start-project">Still unsure? Ask in a brief</ButtonLink>} />
-      <div className="container-studio grid gap-8 py-12 lg:grid-cols-2">
-        {groups.map(([g, items]) => (
-          <section key={g} aria-label={g}>
-            <h2 className="text-[17px] font-semibold">{g}</h2>
-            <div className="mt-3 space-y-3">
-              {items.map(([q, a]) => (
-                <details key={q} className="rounded-[12px] border border-[var(--line)] bg-white p-5">
-                  <summary className="cursor-pointer list-none text-[15px] font-semibold [&::-webkit-details-marker]:hidden">{q}</summary>
-                  <p className="mt-2 text-[14.5px] leading-relaxed text-[#596273]">{a}</p>
-                </details>
-              ))}
-            </div>
-          </section>
-        ))}
-      </div>
+      <PageHero
+        eyebrow={<Eyebrow>FAQ</Eyebrow>}
+        folio="DOC 08 / FAQ"
+        title="Questions, answered plainly"
+        lead="Scope, estimates, timelines, revisions, handoff, and recurring costs — without sales language."
+        meta={[
+          { k: "Groups", v: "Four" },
+          { k: "Questions", v: "Twelve, answered plainly" },
+          { k: "Estimates", v: "After scope and feasibility checks" },
+          { k: "Currency", v: "INR (₹) is the display currency" },
+        ]}
+        cta={<ButtonLink href="/start-project">Still unsure? Ask in a brief</ButtonLink>}
+      />
+
+      {/* ── Two editorial columns, four groups, rows divided by hairlines ──── */}
+      <Section tone="plain">
+        <div className="container-studio grid gap-x-16 gap-y-12 lg:grid-cols-2">
+          {groups.map(([g, items]) => (
+            <section key={g} aria-label={g} className="min-w-0">
+              <Reveal>
+                <h2 className="display-h2 text-[20px]">{g}</h2>
+                <div className="mt-5 border-t border-[var(--line)]">
+                  {items.map(([q, a]) => (
+                    <details key={q} className="group border-b border-[var(--line)]">
+                      <summary className="flex cursor-pointer list-none items-start justify-between gap-6 py-5 text-[15.5px] font-semibold [&::-webkit-details-marker]:hidden">
+                        <span>{q}</span>
+                        <span
+                          aria-hidden
+                          className="shrink-0 text-[22px] font-normal leading-none text-[var(--ink-3)] transition-transform duration-300 group-open:rotate-45 group-open:text-[var(--accent)]"
+                        >
+                          +
+                        </span>
+                      </summary>
+                      <p className="max-w-[68ch] pr-8 pb-6 text-[14.5px] leading-relaxed text-[var(--ink-2)]">
+                        {a}
+                      </p>
+                    </details>
+                  ))}
+                </div>
+              </Reveal>
+            </section>
+          ))}
+        </div>
+      </Section>
     </>
   );
 }

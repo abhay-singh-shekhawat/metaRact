@@ -36,10 +36,23 @@ export function AdminDetailClient({
   }
 
   return (
-    <div className="grid gap-4">
-      {msg && <p role="status" aria-live="polite" className="rounded-lg bg-[var(--bg)] border border-[var(--border)] p-3 text-sm">{msg}</p>}
+    <div className="grid gap-5">
+      {msg && (
+        <p
+          role="status"
+          aria-live="polite"
+          className={`rounded-[10px] border p-3.5 text-[14px] font-medium ${
+            msg === "Saved."
+              ? "border-[var(--ok)]/30 bg-[var(--ok-soft)] text-[var(--ok)]"
+              : "border-[var(--danger)]/30 bg-[var(--danger-soft)] text-[var(--danger)]"
+          }`}
+        >
+          {msg}
+        </p>
+      )}
+
       <form
-        className="card flex flex-wrap items-end gap-3 p-5"
+        className="card grid gap-4 p-6 md:grid-cols-[minmax(200px,260px)_1fr_auto] md:items-end"
         onSubmit={(e) => {
           e.preventDefault();
           const fd = new FormData(e.currentTarget);
@@ -48,25 +61,41 @@ export function AdminDetailClient({
             reason: fd.get("reason") ?? "",
           });
         }}
-      >        <div>
-          <label htmlFor="status" className="field-label">Change status (from {enquiry.status})</label>
-          <select id="status" name="status" className="field-select !w-auto min-w-[220px]" required defaultValue="">
-            <option value="" disabled>Select next status…</option>
-            {options.map((s) => <option key={s} value={s}>{s}</option>)}
+      >
+        <div>
+          <label htmlFor="status" className="field-label">
+            Change status (from {enquiry.status})
+          </label>
+          <select id="status" name="status" className="field-select" required defaultValue="">
+            <option value="" disabled>
+              Select next status…
+            </option>
+            {options.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
           </select>
         </div>
-        <div className="min-w-[220px] flex-1">
-          <label htmlFor="reason" className="field-label">Reason (required to decline / archive)</label>
+        <div>
+          <label htmlFor="reason" className="field-label">
+            Reason (required to decline / archive)
+          </label>
           <input id="reason" name="reason" className="field-input" maxLength={2000} placeholder="Internal reason…" />
         </div>
-        <button type="submit" disabled={busy || options.length === 0} className="btn-primary !min-h-[44px]">
+        <button type="submit" disabled={busy || options.length === 0} className="btn-primary">
           {busy ? "Saving…" : "Update status"}
         </button>
-        {options.length === 0 && <p className="text-sm text-[var(--ink-2)]">Archived enquiries cannot transition{isOwner ? " (owner restore is a documented manual procedure only)." : "."}</p>}
+        {options.length === 0 && (
+          <p className="text-[13.5px] text-[var(--ink-2)] md:col-span-3">
+            Archived enquiries cannot transition
+            {isOwner ? " (owner restore is a documented manual procedure only)." : "."}
+          </p>
+        )}
       </form>
 
       <form
-        className="card flex flex-wrap items-end gap-3 p-5"
+        className="card flex flex-wrap items-end gap-4 p-6"
         onSubmit={(e) => {
           e.preventDefault();
           const fd = new FormData(e.currentTarget);
@@ -76,14 +105,25 @@ export function AdminDetailClient({
         }}
       >
         <div className="min-w-[220px] flex-1">
-          <label htmlFor="assignedTo" className="field-label">Assign to (admin email, blank to unassign)</label>
-          <input id="assignedTo" name="assignedTo" type="email" className="field-input" defaultValue={enquiry.assignedTo ?? ""} placeholder="founder@example.com" />
+          <label htmlFor="assignedTo" className="field-label">
+            Assign to (admin email, blank to unassign)
+          </label>
+          <input
+            id="assignedTo"
+            name="assignedTo"
+            type="email"
+            className="field-input"
+            defaultValue={enquiry.assignedTo ?? ""}
+            placeholder="founder@example.com"
+          />
         </div>
-        <button type="submit" disabled={busy} className="btn-secondary">Save assignment</button>
+        <button type="submit" disabled={busy} className="btn-secondary">
+          Save assignment
+        </button>
       </form>
 
       <form
-        className="card grid gap-3 p-5"
+        className="card grid gap-4 p-6"
         onSubmit={async (e) => {
           e.preventDefault();
           const form = e.currentTarget;
@@ -92,9 +132,21 @@ export function AdminDetailClient({
           if (ok) form.reset();
         }}
       >
-        <label htmlFor="note-body" className="field-label">Add internal note (never sent to customers)</label>
-        <textarea id="note-body" name="body" className="field-textarea" required minLength={1} maxLength={5000} placeholder="Context for the team…" />
-        <button type="submit" disabled={busy} className="btn-secondary w-fit">Add note</button>
+        <label htmlFor="note-body" className="field-label">
+          Add internal note (never sent to customers)
+        </label>
+        <textarea
+          id="note-body"
+          name="body"
+          className="field-textarea"
+          required
+          minLength={1}
+          maxLength={5000}
+          placeholder="Context for the team…"
+        />
+        <button type="submit" disabled={busy} className="btn-secondary w-fit">
+          Add note
+        </button>
       </form>
     </div>
   );
@@ -106,11 +158,11 @@ export function RetryButton({ notificationId, status }: { notificationId: string
   const [msg, setMsg] = useState<string | null>(null);
   if (status !== "failed") return null;
   return (
-    <span>
+    <span className="inline-flex items-center gap-2">
       <button
         type="button"
         disabled={busy}
-        className="btn-secondary !min-h-[32px] !py-1 !px-3 text-xs"
+        className="btn-secondary !min-h-[32px] !px-3 !py-1 text-[12px]"
         onClick={async () => {
           setBusy(true);
           setMsg(null);
@@ -123,7 +175,11 @@ export function RetryButton({ notificationId, status }: { notificationId: string
       >
         {busy ? "Retrying…" : "Retry"}
       </button>
-      {msg && <span role="status" aria-live="polite" className="ml-2 text-xs">{msg}</span>}
+      {msg && (
+        <span role="status" aria-live="polite" className="text-[12px] text-[var(--ink-2)]">
+          {msg}
+        </span>
+      )}
     </span>
   );
 }

@@ -1,11 +1,19 @@
 import type { Metadata } from "next";
-import { PageHero, Card } from "@/components/ui/primitives";
+import { Card, PageHero } from "@/components/ui/primitives";
 import { siteConfig } from "@/config/site";
 
+/** Hairline draft note — a rule and a status dot, not a coloured warning box. */
 function DraftNotice() {
   return (
-    <p role="note" className="rounded-[12px] border border-[#E8C547] bg-[#FFF8E1] p-4 text-[14px] font-medium text-[#6b4e00]">
-      Draft text pending business and legal review. Do not treat this page as final legal advice or a binding commitment.
+    <p
+      role="note"
+      className="flex items-start gap-3 border-t border-[var(--line)] pt-4 text-[13.5px] leading-relaxed text-[var(--ink-2)]"
+    >
+      <span aria-hidden className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--warn)]" />
+      <span>
+        <span className="font-semibold text-[var(--ink)]">Draft.</span> Draft text pending business and
+        legal review. Do not treat this page as final legal advice or a binding commitment.
+      </span>
     </p>
   );
 }
@@ -18,15 +26,22 @@ export function PolicyShell({ title, lead, children }: { title: string; lead: st
   return (
     <>
       <PageHero title={title} lead={lead} />
-      <div className="container-studio max-w-[820px] space-y-5 py-12">
-        <DraftNotice />
-        <Card>
-          <div className="space-y-4 text-[14.5px] leading-relaxed text-[#333c4d]">{children}</div>
-          <p className="mt-6 border-t border-[var(--line)] pt-4 text-[13px] text-[#596273]">
-            Notice version {siteConfig.privacyNoticeVersion} · Last reviewed: pending approval. For access, correction, or deletion requests, use the contact page.
-          </p>
-        </Card>
-      </div>
+      <section className="py-14 md:py-20">
+        <div className="container-studio">
+          <div className="mx-auto max-w-[820px]">
+            <DraftNotice />
+            <Card pad={false} className="mt-8 p-7 md:p-10">
+              <div className="max-w-[68ch] text-[15px] leading-relaxed text-[var(--ink-2)] [&>h2]:mt-8 [&>h2]:border-t [&>h2]:border-[var(--line)] [&>h2]:pt-5 [&>p]:mt-3">
+                {children}
+              </div>
+              <p className="mt-10 border-t border-[var(--line)] pt-4 text-[13px] text-[var(--ink-3)]">
+                Notice version {siteConfig.privacyNoticeVersion} · Last reviewed: pending approval. For
+                access, correction, or deletion requests, use the contact page.
+              </p>
+            </Card>
+          </div>
+        </div>
+      </section>
     </>
   );
 }
