@@ -167,6 +167,11 @@ Hero content lives in `src/components/marketing/scopeStack.ts` and is imported b
 both renderings of the object — the CSS fallback and the WebGL scene — so the
 picture and its accessible text can never drift apart.
 
+The process register (`src/components/motion/ProcessRail.tsx`) renders one
+sequence three ways — the sticky file, the index rail and the small-screen meter
+— from a single `active` index fed by one `IntersectionObserver` band. Step copy
+stays in the route and is passed in; the register never owns content.
+
 Client leaves may wrap server-rendered children (passed as props); they must never
 import server-only code.
 
@@ -194,6 +199,15 @@ Brand motion identity — **Premium**.
   grid. One absolutely-positioned element moved by `transform` only (no gradient
   repaint per frame). At rest it sits where the original static wash sat, so coarse
   pointers and no-JS get the same static look.
+- **Process register:** progress through the sequence comes from one
+  `IntersectionObserver` band at the viewport centre — still no scroll listeners.
+  Each step passed files a numbered sheet behind the current document in a sticky
+  CSS-3D pile, and the same index drives the rail and the small-screen meter. Only
+  `transform` and `opacity` change, so it stays on the compositor. The pile is
+  `aria-hidden`: the index and the list already state the same progress as text, so
+  the picture is a bonus and never the only carrier of meaning (§8). Every change is
+  a CSS transition, which means the global reduced-motion block turns it into an
+  instant state change rather than an animation.
 
 **Tool selection (cheapest that works):** CSS transitions/animations for hover,
 state, entry and predetermined motion; small rAF springs for pointer-coupled
@@ -282,6 +296,9 @@ width, **no console errors**, and **one `<h1>` per page**.
      in no route's First Load JS. `@react-three/drei` was **not** adopted — its useful
      pieces (environment presets, 3D text) fetch remote assets, which the CSP forbids.
      `@react-three/postprocessing` remains optional and uninstalled.
+   - Phase 3 adds **no dependency at all** — the process register is CSS 3D plus one
+     `IntersectionObserver`, the same technique as Phase 1. Measured: `/process`
+     First Load JS **108 kB** and shared First Load JS **103 kB**, both unchanged.
    - Any further library must be justified the same way: measure it, then decide.
 2. **No icon library.** Still deliberate. Icons are typographic glyphs and simple
    geometric SVG marks only.

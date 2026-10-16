@@ -847,6 +847,188 @@ body {
   }
 
   /* ==========================================================================
+     Process register — the file that grows as you read (DESIGN.md §5, §6)
+
+     The page promises that every step produces something you can read, so the
+     sticky column keeps the read-out: each step you pass files a numbered
+     sheet behind the current document. Same paper language as the hero object
+     (matte sheet, hairline ink edge, cobalt tab), and silent to assistive tech
+     — the index and the list already carry this progress as text.
+     ========================================================================== */
+  .process-stack {
+    --fan: 16px;
+    --fan-span: calc(5 * var(--fan));
+    position: relative;
+    isolation: isolate;
+    perspective: 1600px;
+    /* Reserves the depth the pile grows into; the current sheet is in flow and
+       therefore sets the stage's height on its own. */
+    padding-top: var(--fan-span);
+    margin-top: 1.25rem;
+  }
+
+  @media (min-width: 1280px) {
+    .process-stack {
+      --fan: 18px;
+    }
+  }
+
+  .process-sheet {
+    width: calc(100% - var(--fan-span));
+    aspect-ratio: 4 / 3;
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--line);
+    background: var(--surface);
+  }
+
+  /* Sheets already filed — fanned up and to the right, receding in Z. */
+  .process-sheet--pile {
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    transform: translate3d(
+      calc(var(--back) * var(--fan)),
+      calc(var(--back) * var(--fan) * -1),
+      calc(var(--back) * -20px)
+    );
+    box-shadow: 0 18px 34px -30px rgba(11, 15, 23, 0.55);
+    transition:
+      transform var(--t-slow) var(--ease-out),
+      opacity var(--t-slow) var(--ease-out);
+  }
+
+  /* The cobalt tab on the exposed top edge of every filed sheet. */
+  .process-sheet--pile::after {
+    content: "";
+    position: absolute;
+    left: 1.1rem;
+    right: 1.1rem;
+    top: -1px;
+    height: 2px;
+    border-radius: 2px;
+    background: var(--accent);
+    opacity: 0.32;
+  }
+
+  /* The step's number, printed along that exposed edge. */
+  .process-sheet-tab {
+    position: absolute;
+    left: 1.1rem;
+    top: 0;
+    display: flex;
+    align-items: center;
+    height: var(--fan);
+    font-family: var(--font-mono);
+    font-size: 9.5px;
+    letter-spacing: 0.1em;
+    color: var(--ink-3);
+  }
+
+  /* The current document, always on top of the pile. */
+  .process-sheet--current {
+    position: relative;
+    z-index: 50;
+    display: flex;
+    flex-direction: column;
+    padding: 1.15rem 1.3rem 1.25rem;
+    box-shadow: 0 34px 60px -46px rgba(11, 15, 23, 0.6);
+  }
+
+  .process-sheet-num {
+    margin-top: 0.55rem;
+    font-family: var(--font-display);
+    font-size: 42px;
+    font-weight: 600;
+    line-height: 1;
+    letter-spacing: -0.03em;
+    font-variant-numeric: tabular-nums;
+    color: var(--ink);
+  }
+
+  .process-sheet-gauge {
+    margin-top: auto;
+    height: 3px;
+    border-radius: 999px;
+    background: var(--line);
+    overflow: hidden;
+  }
+
+  .process-sheet-gauge i {
+    display: block;
+    width: 100%;
+    height: 100%;
+    background: var(--accent);
+    transform-origin: left center;
+    transition: transform var(--t-base) var(--ease-out);
+  }
+
+  .process-sheet-foot {
+    margin-top: 0.55rem;
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+
+  /* Below lg the sticky column has no room, so one bar carries the same
+     read-out. It pins under the header once the header has condensed. */
+  .process-meter {
+    position: sticky;
+    top: 60px;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    gap: 0.9rem;
+    padding-block: 0.55rem;
+    /* Opaque, not translucent: rows scrolling under it should disappear
+       cleanly rather than ghosting through (DESIGN.md §6). */
+    background: var(--canvas);
+  }
+
+  @media (min-width: 1024px) {
+    .process-meter {
+      display: none;
+    }
+  }
+
+  .process-meter-track {
+    position: relative;
+    flex: 1;
+    height: 3px;
+    border-radius: 999px;
+    background: var(--line);
+    overflow: hidden;
+  }
+
+  .process-meter-track i {
+    position: absolute;
+    inset: 0;
+    background: var(--accent);
+    transform-origin: left center;
+    transition: transform var(--t-base) var(--ease-out);
+  }
+
+  /* The current step, marked in the list itself. The rule appears with the
+     colour, so the marker is never colour-only (DESIGN.md §8). */
+  .process-row-rule {
+    position: absolute;
+    left: 0;
+    top: 2rem;
+    bottom: 2rem;
+    width: 2px;
+    border-radius: 2px;
+    background: var(--accent);
+    transform: scaleY(0);
+    transform-origin: top center;
+    transition: transform var(--t-base) var(--ease-out);
+  }
+
+  .process-row-rule.is-active {
+    transform: scaleY(1);
+  }
+
+  /* ==========================================================================
      Admin console
      ========================================================================== */
 

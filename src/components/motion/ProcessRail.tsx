@@ -1,11 +1,30 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
+
+/** "3 · Scope in writing" -> "Scope in writing" */
+const label = (title: string) => title.replace(/^\d+\s*·\s*/, "");
+/** 3 -> "03" */
+const pad = (n: number) => String(n).padStart(2, "0");
 
 /**
- * Scroll-linked process rail (DESIGN.md §5). Meaning, not decoration: it shows
- * where the reader is in the studio's own process. Progress is derived from an
- * IntersectionObserver band at the viewport centre — no scroll listeners.
+ * The process register (DESIGN.md §5, §6). One sequence, three read-outs, all
+ * driven by the same IntersectionObserver band at the viewport centre — there
+ * are no scroll listeners anywhere in this component.
+ *
+ *  - the file — a sticky pile of sheets where every step you pass files a
+ *    numbered document behind the current one (lg and up);
+ *  - the index — the rail that maps the whole sequence (lg and up);
+ *  - the meter — the same read-out as a single bar below lg, where the sticky
+ *    column has no room to exist.
+ *
+ * Meaning, not decoration: the pile is the studio's own promise — "every step
+ * produces something you can read" — as a thing you can watch accumulate. It
+ * is `aria-hidden` because the index and the list already state the same
+ * progress as text.
+ *
+ * Motion is CSS transitions only, so the global reduced-motion block turns
+ * every state change into an instant one rather than an animation.
  */
 export function ProcessRail({ steps }: { steps: readonly (readonly [string, string])[] }) {
   const [active, setActive] = useState(0);
@@ -32,27 +51,66 @@ export function ProcessRail({ steps }: { steps: readonly (readonly [string, stri
   }, [steps.length]);
 
   const total = steps.length;
+  const current = active + 1;
 
   return (
     <div className="grid gap-10 lg:grid-cols-[300px_1fr] lg:gap-16">
-      {/* Sticky index */}
+      {/* ── Sticky read-out: the file grows as you read ──────────────────── */}
       <div className="hidden lg:block">
         <div className="sticky top-28">
           <p className="meta">Progress</p>
-          <div className="relative mt-5 pl-6">
+
+          <div className="process-stack" aria-hidden>
+            {steps.map(([title], i) => {
+              // > 0 = filed that many sheets back and up; otherwise it is still
+              // parked just in front of the pile, waiting its turn.
+              const back = Math.max(-1.5, active - i);
+              const filed = active - i > 0;
+              return (
+                <span
+                  key={title}
+                  className="process-sheet process-sheet--pile"
+                  style={
+                    {
+                      "--back": back,
+                      opacity: filed ? Math.max(0.55, 1 - back * 0.09) : 0,
+                      zIndex: filed ? i + 1 : 0,
+                    } as CSSProperties
+                  }
+                >
+                  <span className="process-sheet-tab">{pad(i + 1)}</span>
+                </span>
+              );
+            })}
+
+            <span className="process-sheet process-sheet--current">
+              <span className="process-sheet-num">{pad(current)}</span>
+              <span className="process-sheet-gauge">
+                <i style={{ transform: `scaleX(${current / total})` }} />
+              </span>
+              <span className="process-sheet-foot">
+                Step {pad(current)} / {pad(total)}
+              </span>
+            </span>
+          </div>
+
+          {/* The index — the map of the whole sequence. */}
+          <div className="relative mt-8 pl-6">
             <span aria-hidden className="absolute left-0 top-1 bottom-1 w-px bg-[var(--line)]" />
             <span
               aria-hidden
               className="absolute left-0 top-1 w-px bg-[var(--accent)] transition-[height] duration-500"
               style={{ height: `calc((100% - 0.5rem) * ${total > 1 ? active / (total - 1) : 1})` }}
             />
-            <ol className="grid gap-4">
+            <ol className="grid gap-3">
               {steps.map(([title], i) => (
                 <li key={title} className="flex items-center gap-3">
                   <span
                     aria-hidden
                     className={`-ml-[30px] grid h-[11px] w-[11px] place-items-center rounded-full border transition-colors duration-300 ${
-                      i <= active ? "border-[var(--accent)] bg-[var(--accent)]" : "border-[var(--line-2)] bg-[var(--canvas)]"
+                      i <= active
+                        ? "border-[var(--accent)] bg-[var(--accent)]"
+                        : "border-[var(--line-2)] bg-[var(--canvas)]"
                     }`}
                   />
                   <span
@@ -60,7 +118,7 @@ export function ProcessRail({ steps }: { steps: readonly (readonly [string, stri
                       i === active ? "font-semibold text-[var(--ink)]" : "text-[var(--ink-3)]"
                     }`}
                   >
-                    {title.replace(/^\d+\s*·\s*/, "")}
+                    {label(title)}
                   </span>
                 </li>
               ))}
@@ -69,26 +127,39 @@ export function ProcessRail({ steps }: { steps: readonly (readonly [string, stri
         </div>
       </div>
 
-      {/* Steps */}
-      <ol ref={listRef} className="border-t border-[var(--line)]">
-        {steps.map(([title, body], i) => (
-          <li
-            key={title}
-            data-step={i}
-            className="group border-b border-[var(--line)] py-8 transition-colors duration-300 md:py-10"
-          >
-            <div className="grid gap-4 md:grid-cols-[88px_1fr] md:gap-8">
-              <p className={`meta pt-1 transition-colors duration-300 ${i === active ? "text-[var(--accent)]" : ""}`}>
-                {String(i + 1).padStart(2, "0")}
-              </p>
-              <div>
-                <h3 className="display-h3 text-[19px]">{title.replace(/^\d+\s*·\s*/, "")}</h3>
-                <p className="mt-2.5 max-w-[64ch] text-[15px] leading-relaxed text-[var(--ink-2)]">{body}</p>
+      {/* ── Steps ────────────────────────────────────────────────────────── */}
+      <div className="min-w-0 lg:pb-16">
+        {/* Below lg, the same read-out as one bar. */}
+        <div className="process-meter">
+          <span className="meta whitespace-nowrap">
+            Step {pad(current)} / {pad(total)}
+          </span>
+          <span className="process-meter-track" aria-hidden>
+            <i style={{ transform: `scaleX(${current / total})` }} />
+          </span>
+        </div>
+
+        <ol ref={listRef} className="border-t border-[var(--line)]">
+          {steps.map(([title, body], i) => (
+            <li
+              key={title}
+              data-step={i}
+              className="relative border-b border-[var(--line)] py-8 md:py-10"
+            >
+              <span aria-hidden className={`process-row-rule ${i === active ? "is-active" : ""}`} />
+              <div className="grid gap-4 md:grid-cols-[88px_1fr] md:gap-8">
+                <p className={`meta pt-1 transition-colors duration-300 ${i === active ? "text-[var(--accent)]" : ""}`}>
+                  {pad(i + 1)}
+                </p>
+                <div>
+                  <h3 className="display-h3 text-[19px]">{label(title)}</h3>
+                  <p className="mt-2.5 max-w-[64ch] text-[15px] leading-relaxed text-[var(--ink-2)]">{body}</p>
+                </div>
               </div>
-            </div>
-          </li>
-        ))}
-      </ol>
+            </li>
+          ))}
+        </ol>
+      </div>
     </div>
   );
 }
