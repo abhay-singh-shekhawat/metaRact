@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { enabledServices } from "@/config/services";
 import { siteConfig } from "@/config/site";
+import { ReadinessStrip } from "./ReadinessStrip";
+import { INITIAL_READINESS, readReadiness, sameReadiness, type Readiness } from "./readiness";
 
 interface FieldErrors {
   [k: string]: string;
@@ -91,6 +93,11 @@ export function EnquiryForm({ preselected }: { preselected?: string }) {
   const [errors, setErrors] = useState<FieldErrors>({});
   const [topError, setTopError] = useState<string | null>(null);
   const [successRef, setSuccessRef] = useState<string | null>(null);
+  // The live readiness read-out (DESIGN.md §5). Derived from the form element
+  // itself, via the same `new FormData(form)` the submit handler reads, so the
+  // strip can never disagree with what would be sent.
+  const formRef = useRef<HTMLFormElement>(null);
+  const [readiness, setReadiness] = useState<Readiness>(INITIAL_READINESS);
   // Gate the submit on mount: a pre-hydration native submit would GET the
   // form (PII in URL query) instead of running the fetch handler.
   const mounted = useSyncExternalStore(
@@ -164,6 +171,27 @@ export function EnquiryForm({ preselected }: { preselected?: string }) {
     resetTurnstile();
   }
 
+  /**
+   * Recompute the readiness strip from the form as it stands. React's `onChange`
+   * fires on input for text fields and on change for selects and checkboxes, so
+   * one bubbling handler on the <form> covers every control — including fields
+   * the conditional service sections mount and unmount. `setReadiness` bails out
+   * on an unchanged reading, so the strip does not re-render the form per
+   * keystroke beyond the ones that actually move it.
+   */
+  const refreshReadiness = useCallback(() => {
+    const el = formRef.current;
+    if (!el) return;
+    const next = readReadiness(new FormData(el));
+    setReadiness((prev) => (sameReadiness(prev, next) ? prev : next));
+  }, []);
+
+  // Covers browser autofill and back-navigation restores, which put values in
+  // the DOM that the initial state does not know about.
+  useEffect(() => {
+    refreshReadiness();
+  }, [refreshReadiness]);
+
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setSubmitting(true);
@@ -226,7 +254,6 @@ export function EnquiryForm({ preselected }: { preselected?: string }) {
         setSuccessRef(data?.data?.referenceNumber || "received");
         form.reset();
         resetTurnstile();
-        document.getElementById("form-status")?.focus();
         // analytics: aggregate only
         try {
           (window as unknown as { dataLayer?: unknown[] }).dataLayer?.push?.({ event: "project_form_submitted" });
@@ -235,15 +262,30 @@ export function EnquiryForm({ preselected }: { preselected?: string }) {
         const fe: FieldErrors = data?.error?.fieldErrors || {};
         setErrors(fe);
         setTopError(data?.error?.message || "Something went wrong. Your request was not confirmed — please check and retry.");
-        document.getElementById("form-errors")?.focus();
       }
     } catch {
       setTopError("Network error — your request was not confirmed as received. Please retry with the same form (your text is preserved).");
-      document.getElementById("form-errors")?.focus();
     } finally {
       setSubmitting(false);
     }
   }
+
+  /**
+   * Focus management for the two terminal states. These were
+   * `getElementById(...).focus()` calls in the submit handler, one line after
+   * the `setState` that renders the element. A state update in a promise
+   * continuation is not committed until after the current block runs, so the
+   * lookup always returned null, focus fell to <body>, and keyboard and
+   * screen-reader users were stranded at the top of a page they had already
+   * left. An effect runs on the commit, when the element exists.
+   */
+  useEffect(() => {
+    if (successRef) document.getElementById("form-status")?.focus();
+  }, [successRef]);
+
+  useEffect(() => {
+    if (topError) document.getElementById("form-errors")?.focus();
+  }, [topError, errors]);
 
   const err = (k: string) => errors[k];
 
@@ -254,16 +296,22 @@ export function EnquiryForm({ preselected }: { preselected?: string }) {
         tabIndex={-1}
         role="status"
         aria-live="polite"
-        className="rise overflow-hidden rounded-[16px] border border-[var(--ok)]/25 bg-[var(--surface)]"
+        className="filed-sheet rise relative overflow-hidden rounded-[16px] border border-[var(--ok)]/25 bg-[var(--surface)]"
       >
+        {/* The cobalt tab the process pile's filed sheets wear, at full strength
+            — the brief has just joined them (DESIGN.md §5, §6). */}
+        <span aria-hidden className="filed-tab" />
         <div className="border-b border-[var(--line)] bg-[var(--ok-soft)] px-6 py-5">
-          <p className="meta !text-[var(--ok)]">Submission confirmed</p>
+          <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+            <p className="meta !text-[var(--ok)]">Submission confirmed</p>
+            <p className="meta">Form 01 / Enquiry</p>
+          </div>
           <p className="display-h3 mt-2 text-[20px] text-[var(--ok)]">Request received — thank you.</p>
         </div>
         <div className="p-6">
-          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+          <div className="filed-ref">
             <span className="meta">Your reference</span>
-            <span className="font-mono text-[20px] font-semibold tracking-[0.02em]">{successRef}</span>
+            <span className="filed-ref-value">{successRef}</span>
           </div>
           <p className="mt-4 max-w-[62ch] text-[14.5px] leading-relaxed text-[var(--ink-2)]">
             This confirms receipt, not acceptance or a quote. We&apos;ll review your brief and contact you using the
@@ -276,7 +324,9 @@ export function EnquiryForm({ preselected }: { preselected?: string }) {
   }
 
   return (
-    <form onSubmit={onSubmit} noValidate aria-describedby="form-intro" className="space-y-7">
+    <form ref={formRef} onSubmit={onSubmit} onChange={refreshReadiness} noValidate aria-describedby="form-intro" className="space-y-7">
+      <ReadinessStrip readiness={readiness} />
+
       <p id="form-intro" className="text-[14.5px] leading-relaxed text-[var(--ink-2)]">
         Plain language is fine. Fields marked * are required. We acknowledge privacy notice version {siteConfig.privacyNoticeVersion}. Please don&apos;t send passwords, keys, or sensitive data.
       </p>

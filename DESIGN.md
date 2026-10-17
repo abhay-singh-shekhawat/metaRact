@@ -193,6 +193,17 @@ a measurement or a result.
 Client leaves may wrap server-rendered children (passed as props); they must never
 import server-only code.
 
+The enquiry's readiness read-out (`src/components/forms/readiness.ts` +
+`ReadinessStrip.tsx`, rendered by `EnquiryForm`) is the second derivation module:
+`readReadiness` turns the live `FormData` into `{ answered, total, ready }` using
+the same `new FormData(form)` call the submit handler reads, so the strip can
+never disagree with what would be sent. Its six checks are the six things
+`src/lib/validation/enquiry.ts` actually rejects a submission for, and it is the
+*only* read-out on that page on purpose — a live mirror of the fields beside you
+would be duplication wearing a document costume. The strip pins under the header
+for as long as the form is on screen, because "am I finished?" is the one thing
+an eight-screen enquiry cannot otherwise answer.
+
 ## 6. Motion
 
 Brand motion identity — **Premium**.
@@ -229,6 +240,14 @@ Brand motion identity — **Premium**.
   the picture is a bonus and never the only carrier of meaning (§8). Every change is
   a CSS transition, which means the global reduced-motion block turns it into an
   instant state change rather than an animation.
+- **Enquiry moment (M5):** two beats, both CSS. The readiness strip is one
+  `transform: scaleX()` gauge and one colour transition, updated from the form's own
+  `onChange` — one bubbling handler on the `<form>` covers text fields, selects,
+  checkboxes and the fields the conditional service sections mount and unmount, and
+  an unchanged reading bails out before re-rendering the form. On success the brief
+  becomes a filed sheet: the same 2 px cobalt tab the process pile's sheets wear,
+  drawn in from `scaleX(0)` — the sheet you just sent has joined them. No new
+  scroll or pointer listener, and no library.
 
 **Tool selection (cheapest that works):** CSS transitions/animations for hover,
 state, entry and predetermined motion; small rAF springs for pointer-coupled
@@ -282,7 +301,10 @@ prints its full chrome from `768` up and swaps to the unlabelled compact plan be
 that (any label would render about 5 px tall at a 350 px sheet); the `/process`
 sticky column—card + fan + six index rows—is held under `500 px` so it still fits
 beneath the header on a ~620 px-tall desktop viewport, where it would otherwise
-scroll its own top off-screen; nothing may
+scroll its own top off-screen; the readiness strip on `/start-project` bleeds
+across the card's padding and is inset by it again, at both of the card's
+paddings (`p-6` / `md:p-9`), so a field scrolling underneath never shows in the
+gutter beside it; nothing may
 introduce horizontal scroll (`document.scrollWidth === clientWidth` is asserted in
 the QA sweep).
 
@@ -299,6 +321,14 @@ the QA sweep).
 - Decorative motion (lamp, tilt, ornament) is `aria-hidden` and keyboard-irrelevant;
   it must never gate a function. Admin retains `no-store` caching and its
   server-side auth checks untouched.
+- The readiness strip is `aria-hidden`. The inputs already carry `required` and the
+  server returns per-field errors, so the strip is a visual echo — and a live region
+  that announced itself on every keystroke would be worse than silence. It is also
+  never the only carrier of meaning: it restates what the form itself enforces (§6).
+- Terminal states move focus deliberately: the success and error focus targets are
+  set in effects, not in the submit handler. A `setState` in a promise continuation
+  is not committed until after the current block, so the `getElementById(...)?.focus()`
+  calls that used to sit there always found nothing and dropped focus on `<body>`.
 
 ## 9. Test contract (must not break)
 
@@ -334,6 +364,12 @@ width, **no console errors**, and **one `<h1>` per page**.
      server-rendered inline SVG and ships no client JS. Measured: `/work` and
      `/work/[slug]` First Load JS **107 kB** and shared First Load JS **103 kB**,
      all unchanged.
+   - Phase 5 adds **no dependency at all** — the readiness read-out is one
+     `scaleX()` gauge driven by the form's own `onChange`, and the filed sheet is
+     a CSS animation. Measured: `/start-project` route JS **9.34 → 9.83 kB**
+     (+0.49 kB for the two new modules) with First Load JS **116 kB** and shared
+     First Load JS **103 kB** both unchanged; `/process` First Load JS **108 kB**,
+     unchanged, after the meter was generalised into `.readout-meter`.
    - Any further library must be justified the same way: measure it, then decide.
 2. **No icon library.** Still deliberate. Icons are typographic glyphs and simple
    geometric SVG marks only.

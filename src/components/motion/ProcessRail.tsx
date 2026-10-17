@@ -135,11 +135,11 @@ export function ProcessRail({ steps }: { steps: readonly (readonly [string, stri
       {/* ── Steps ────────────────────────────────────────────────────────── */}
       <div className="min-w-0 lg:pb-16">
         {/* Below lg, the same read-out as one bar. */}
-        <div className="process-meter">
+        <div className="readout-meter process-meter">
           <span className="meta whitespace-nowrap">
             Step {pad(current)} / {pad(total)}
           </span>
-          <span className="process-meter-track" aria-hidden>
+          <span className="readout-meter-track" aria-hidden>
             <i style={{ transform: `scaleX(${current / total})` }} />
           </span>
         </div>

@@ -971,9 +971,12 @@ body {
     color: var(--ink-2);
   }
 
-  /* Below lg the sticky column has no room, so one bar carries the same
-     read-out. It pins under the header once the header has condensed. */
-  .process-meter {
+  /* The shared one-line read-out: a label, a hairline gauge and a state, pinned
+     under the header. Used by the process register (below lg, where the sticky
+     column has no room) and by the enquiry form's readiness strip. Opaque, not
+     translucent: content scrolling under it should disappear cleanly rather
+     than ghosting through (DESIGN.md §6). */
+  .readout-meter {
     position: sticky;
     top: 60px;
     z-index: 10;
@@ -981,18 +984,10 @@ body {
     align-items: center;
     gap: 0.9rem;
     padding-block: 0.55rem;
-    /* Opaque, not translucent: rows scrolling under it should disappear
-       cleanly rather than ghosting through (DESIGN.md §6). */
     background: var(--canvas);
   }
 
-  @media (min-width: 1024px) {
-    .process-meter {
-      display: none;
-    }
-  }
-
-  .process-meter-track {
+  .readout-meter-track {
     position: relative;
     flex: 1;
     height: 3px;
@@ -1001,12 +996,84 @@ body {
     overflow: hidden;
   }
 
-  .process-meter-track i {
+  .readout-meter-track i {
     position: absolute;
     inset: 0;
     background: var(--accent);
     transform-origin: left center;
     transition: transform var(--t-base) var(--ease-out);
+  }
+
+  @media (min-width: 1024px) {
+    .process-meter {
+      display: none;
+    }
+  }
+
+  /* The enquiry form's readiness strip sits inside the card, so it paints the
+     card's surface rather than the page's, and bleeds across the card's padding
+     to the border box — otherwise a row scrolling up would show in the gutter
+     on either side of it. */
+  .readiness-strip {
+    margin-inline: -1.5rem;
+    padding-inline: 1.5rem;
+    background: var(--surface);
+  }
+
+  @media (min-width: 768px) {
+    .readiness-strip {
+      margin-inline: -2.25rem;
+      padding-inline: 2.25rem;
+    }
+  }
+
+  .readiness-state {
+    transition: color var(--t-base) var(--ease-out);
+  }
+
+  .readiness-state.is-ready {
+    color: var(--accent);
+  }
+
+  /* The filed brief. The tab is the one the process pile's sheets wear, at full
+     strength: the sheet you just sent has joined them. */
+  .filed-tab {
+    position: absolute;
+    top: 0;
+    left: 1.1rem;
+    right: 1.1rem;
+    height: 2px;
+    border-radius: 999px;
+    background: var(--accent);
+    transform-origin: left center;
+    animation: filed-tab-in var(--t-slow) var(--ease-out) both;
+  }
+
+  @keyframes filed-tab-in {
+    from {
+      transform: scaleX(0);
+    }
+    to {
+      transform: scaleX(1);
+    }
+  }
+
+  .filed-ref {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    column-gap: 0.9rem;
+    row-gap: 0.35rem;
+    padding-bottom: 0.85rem;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .filed-ref-value {
+    font-family: var(--font-mono);
+    font-size: 21px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: var(--ink);
   }
 
   /* The current step, marked in the list itself. The rule appears with the
