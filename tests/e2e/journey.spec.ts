@@ -1,11 +1,9 @@
 import { test, expect } from "@playwright/test";
 import { randomUUID } from "crypto";
-import { devSignIn } from "./helpers";
-
-const DEV_EMAIL = process.env.ADMIN_DEV_EMAIL || "founder@example.com";
-const DEV_PASSWORD = process.env.ADMIN_DEV_PASSWORD || "change-me-in-env-local";
+import { devSignIn, stubTurnstile } from "./helpers";
 
 test("home -> service -> start-project -> submit -> reference shown", async ({ page }) => {
+  await stubTurnstile(page);
   await page.goto("/");
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
   const servicesLink = page.getByRole("link", { name: "Services" }).first();
@@ -25,11 +23,13 @@ test("home -> service -> start-project -> submit -> reference shown", async ({ p
   await page.getByLabel(/^Email/i).fill(`e2e-${Date.now()}@example.com`);
   await page.getByRole("checkbox", { name: /privacy notice/i }).check();
   await page.getByRole("button", { name: /Submit enquiry/i }).click();
-  await expect(page.getByText(/Request received/i)).toBeVisible();
+  // Generous: the first enquiry in a run makes the dev server compile the route.
+  await expect(page.getByText(/Request received/i)).toBeVisible({ timeout: 15_000 });
   await expect(page.getByText(/REQ-/)).toBeVisible();
 });
 
 test("invalid input shows field errors and preserves input", async ({ page }) => {
+  await stubTurnstile(page);
   await page.goto("/start-project");
   await page.getByLabel(/Project title/i).fill("Hi");
   await page.getByRole("button", { name: /Submit enquiry/i }).click();
@@ -51,6 +51,9 @@ test("unauthenticated admin API is denied", async ({ request }) => {
 
 test("admin can sign in, see a new enquiry, and move it to reviewing", async ({ page, request }) => {
   const key = randomUUID();
+  // No turnstileToken: the e2e server runs with TURNSTILE_SECRET_KEY="" so the
+  // documented dev bypass applies (see tests/e2e/env.ts). A real token cannot
+  // be minted outside a browser widget.
   const created = await request.post("/api/public/enquiries", {
     headers: { "Idempotency-Key": key },
     data: {
@@ -67,7 +70,7 @@ test("admin can sign in, see a new enquiry, and move it to reviewing", async ({ 
   const { data } = await created.json();
   expect(data.referenceNumber).toMatch(/^REQ-/);
 
-  await devSignIn(page, DEV_EMAIL, DEV_PASSWORD);
+  await devSignIn(page);
   await expect(page.getByRole("heading", { name: "Overview" })).toBeVisible();
   await expect(page.getByText(data.referenceNumber).first()).toBeVisible();
 

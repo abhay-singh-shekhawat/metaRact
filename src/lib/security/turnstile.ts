@@ -1,9 +1,21 @@
+/**
+ * True only for environments that are explicitly non-production.
+ *
+ * This check used to be `process.env.NODE_ENV === "production"`, which meant
+ * any unexpected value — a typo like "developments", an empty string, an unset
+ * variable in a bare script — silently disabled verification. Anti-abuse has to
+ * fail closed, so only a recognised development value opens the bypass.
+ */
+function isDevLike(): boolean {
+  const env = process.env.NODE_ENV;
+  return env === "development" || env === "test";
+}
+
 export async function verifyTurnstile(token: string | undefined, ip?: string | null): Promise<{ ok: boolean; code?: string }> {
   const secret = process.env.TURNSTILE_SECRET_KEY;
-  const isProd = process.env.NODE_ENV === "production";
   if (!secret) {
-    // Fail closed in production, open in dev/test with documented bypass
-    if (isProd) return { ok: false, code: "TURNSTILE_NOT_CONFIGURED" };
+    // Fail closed everywhere except development/test, which use the documented bypass.
+    if (!isDevLike()) return { ok: false, code: "TURNSTILE_NOT_CONFIGURED" };
     return { ok: true };
   }
   if (!token) return { ok: false, code: "TURNSTILE_MISSING" };

@@ -4,12 +4,18 @@ import { createHmac, timingSafeEqual } from "crypto";
 const COOKIE = "studio_admin_session";
 
 /**
- * Dev/test fallback auth. Available only when explicitly allowed:
- * non-production environments, or production with ALLOW_DEV_ADMIN=true
+ * Dev/test fallback auth. Available only when explicitly allowed: a recognised
+ * development environment, or production with ALLOW_DEV_ADMIN=true
  * (emergency operator access; never the normal production path).
+ *
+ * The check used to be `NODE_ENV !== "production"`, so any unexpected value —
+ * a typo, an empty string — enabled the local cookie path, which is signed with
+ * a default secret when ADMIN_SESSION_SECRET is unset. Only a recognised
+ * development value may enable it now.
  */
 export function isDevAuthAllowed(): boolean {
-  if (process.env.NODE_ENV !== "production") return true;
+  const env = process.env.NODE_ENV;
+  if (env === "development" || env === "test") return true;
   return process.env.ALLOW_DEV_ADMIN === "true";
 }
 

@@ -1,4 +1,5 @@
 import { defineConfig, devices } from "@playwright/test";
+import { e2eServerEnv } from "./tests/e2e/env";
 
 export default defineConfig({
   testDir: "./tests/e2e",
@@ -19,5 +20,8 @@ export default defineConfig({
     url: "http://localhost:3000/api/health/live",
     reuseExistingServer: true,
     timeout: 120_000,
+    // Run the server hermetically against the local fallbacks instead of live
+    // Atlas / Upstash / Cloudflare accounts. See tests/e2e/env.ts.
+    env: e2eServerEnv(),
   },
 });

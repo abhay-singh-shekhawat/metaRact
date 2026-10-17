@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 import * as fs from "fs";
-import { devSignIn } from "./helpers";
+import { devSignIn, settle, stubTurnstile } from "./helpers";
 
 const ROUTES = [
   "/", "/services", "/services/websites-digital-experiences",
@@ -22,6 +22,7 @@ const findings: Array<Record<string, unknown>> = [];
 
 for (const vp of VIEWPORTS) {
   test(`sweep ${vp.name}`, async ({ page }, testInfo) => {
+    await stubTurnstile(page);
     await page.setViewportSize({ width: vp.width, height: vp.height });
     let currentErrors: string[] = [];
     page.on("console", (m) => {
@@ -31,12 +32,13 @@ for (const vp of VIEWPORTS) {
       // Raw endpoints have no viewport/overflow semantics; still assert status.
       const isRaw = route === "/robots.txt" || route === "/sitemap.xml";
       currentErrors = [];
-      const res = await page.goto(route, { waitUntil: "networkidle" });
+      const res = await page.goto(route, { waitUntil: "load" });
+      await settle(page);
       const status = res?.status() ?? -1;
       const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
       const title = await page.title();
       const shot = `test-results/qa/${testInfo.project.name}-${vp.name}${route === "/" ? "-home" : route.replace(/[^a-z0-9]+/gi, "-")}.png`;
-      await page.screenshot({ path: shot, fullPage: false });
+      await page.screenshot({ path: shot, fullPage: false, animations: "disabled" });
       findings.push({ viewport: vp.name, route, status, consoleErrors: isRaw ? [] : [...currentErrors], hOverflow: isRaw ? 0 : overflow, title });
       expect(status, `${vp.name} ${route}`).toBeLessThan(500);
     }
@@ -50,17 +52,14 @@ test("sweep admin authed", async ({ page }, testInfo) => {
   page.on("console", (m) => {
     if (m.type() === "error") adminErrors.push(m.text().slice(0, 200));
   });
-  await devSignIn(
-    page,
-    process.env.ADMIN_DEV_EMAIL || "founder@example.com",
-    process.env.ADMIN_DEV_PASSWORD || "change-me-in-env-local"
-  );
+  await devSignIn(page);
   await expect(page.getByRole("heading", { name: "Overview" })).toBeVisible();
   for (const route of ["/admin", "/admin/enquiries", "/admin/settings"]) {
     adminErrors.length = 0;
-    const res = await page.goto(route, { waitUntil: "networkidle" });
+    const res = await page.goto(route, { waitUntil: "load" });
+    await settle(page);
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
-    await page.screenshot({ path: `test-results/qa/${testInfo.project.name}-admin${route.replace(/[^a-z0-9]+/gi, "-")}.png` });
+    await page.screenshot({ path: `test-results/qa/${testInfo.project.name}-admin${route.replace(/[^a-z0-9]+/gi, "-")}.png`, animations: "disabled" });
     findings.push({ viewport: "desktop", route, status: res?.status() ?? -1, consoleErrors: [...adminErrors], hOverflow: overflow, title: await page.title() });
     expect(res?.status(), route).toBeLessThan(500);
   }
