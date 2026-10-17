@@ -613,7 +613,10 @@ export function EnquiryForm({ preselected }: { preselected?: string }) {
           <input type="hidden" name="turnstileToken" value={turnstileToken} readOnly />
           {turnstileFailed ? (
             <div className="mt-2 flex flex-wrap items-center gap-3">
-              <p className={errCls}>Verification failed (code 600* — retryable). This is common on Brave / Firefox / VPN.</p>
+              <p className={errCls}>
+                The verification check did not finish. A privacy setting, an ad-blocker or a VPN
+                usually causes it — retry, or open this page in another browser.
+              </p>
               <button type="button" onClick={retryTurnstile} className="btn-secondary !min-h-[40px]">
                 Retry verification
               </button>
