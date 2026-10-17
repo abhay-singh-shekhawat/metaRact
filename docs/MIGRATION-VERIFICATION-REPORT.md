@@ -190,3 +190,62 @@ curl http://localhost:3000/api/health/ready     # → {"database":"connected"}
 ---
 
 **Conclusion:** the MongoDB Atlas + Gmail SMTP migration is functionally correct and verified end to end. The one blocking defect found (admin bootstrap) is fixed and re-verified; the remaining items are an architectural improvement (transactional writes), missing credentials, and cosmetic doc nits.
+
+---
+
+# Follow-up pass — 2026-10-17 (branch `chore/hardening`)
+
+Everything above is the record of the 2026-10-15 verification and is left as written. This section supersedes specific items in it.
+
+## 10. Gate results (this pass)
+
+| Gate | Command | Result |
+|---|---|---|
+| Typecheck | `pnpm typecheck` | ✅ exit 0 |
+| Lint | `pnpm lint` | ✅ exit 0 |
+| Unit tests | `pnpm test` | ✅ **44/44** (was 28) |
+| Integration tests | `pnpm test:integration` | ✅ **12/12** (was 11) |
+| Production build | `pnpm build` | ✅ exit 0, verified **with no `.env.local` present** |
+| E2E (chromium + Pixel 7) | `pnpm test:e2e` | ✅ **84/84** |
+| CI | `.github/workflows/ci.yml` | **New** — verify job + e2e job |
+
+The e2e suite did not pass on a fresh checkout before this pass; it needed a live Atlas cluster with a bootstrapped admin, a reachable Upstash instance, a real Turnstile secret **and** the operator's Gmail credentials. It now runs hermetically (see ADR-005).
+
+## 11. §6 issues — status
+
+### 6.1 Non-atomic MongoDB writes — **Fixed** (was Important)
+All four write paths now run inside `session.withTransaction`: the create unit (enquiry + `created` event + both outbox rows, including the reference-number draw), the status transition, the assignment, and the note. New `src/lib/mongodb/transaction.ts`.
+
+Two things are worth carrying forward:
+
+- **Transactions require a replica set.** Atlas shared tiers — Free (`M0`), Flex, and the retired `M2`/`M5` — reject them with `IllegalOperation` (code 20). The store detects that once, logs why, and degrades to the previous statement-at-a-time behaviour rather than refusing every submission. So the guarantee holds on a dedicated cluster (`M10`+) and **does not** on a free-tier one. That is a purchase decision, not a code decision. The detection is verified against the documented rejection rather than assumed.
+- `tests/integration/mongo.test.ts` now starts a **single-node replica set**; against the standalone instance it used before, the suite would have exercised only the degraded path. It gains the assertion that was missing: a unit that fails part-way leaves nothing behind, neither its probe row nor its counter bump.
+
+### 6.2 `ensureIndexes` — **Claim corrected** (was Minor)
+The statement that "a partial failure will not retry" is wrong: `indexesEnsured` is latched only **after** `createIndexes` resolves, so a failure leaves it false and the next call retries. A dev hot reload re-evaluates the module and re-ensures. The existing behaviour is correct; no change made.
+
+### 6.3 Gmail SMTP — **Now forced off in tests** (was Blocked)
+Still not live-verified with a real App Password. But it *was* exercised live by accident and that is worth recording: `.env.local` had `GMAIL_USER`/`GMAIL_APP_PASSWORD`/`EMAIL_FROM` set, `getEmailMode()` returns `smtp` whenever they are, so the test suite and the probes in this pass sent **real email through the operator's Gmail account** (roughly 18 messages, to the configured team address and to `@example.com` recipients). Those submissions also blocked 6–9 s each on the SMTP round-trip, which is why several assertions were timing out. The e2e server env now clears all three variables, so tests run `log-only` and cannot repeat it.
+
+### 6.4 Turnstile / Upstash — **Partly closed**
+Still no live keys. The dev bypass is now **fail-closed**: `verifyTurnstile` opens it only for a `NODE_ENV` of exactly `development` or `test` (it previously treated any unrecognised value — including `""` and the typo `"developments"` that was in `.env.local` — as non-production). Both branches now have mocked-fetch unit tests (`tests/unit/turnstile.test.ts`). The in-process rate limiter likewise gained coverage (`tests/unit/rate-limit.test.ts`) — it had none.
+
+### 6.5 README pnpm nit — **Fixed**
+`README.md` now states pnpm **9.12.0**, matching `packageManager` and CI.
+
+## 12. Added in this pass
+
+| Change | Note |
+|---|---|
+| Share card | `src/app/opengraph-image.tsx` — 1200×630, generated at build time from config, inherited by every route. There was no `og:image` at all before. |
+| Per-page share metadata | The root layout's explicit `openGraph.title`/`description` were winning over each page's own, so **every route was shared as the homepage**. Removed; each route now resolves its own. Verified per route. |
+| Dev-auth hardening | `isDevAuthAllowed()` requires `development`/`test` (or an explicit `ALLOW_DEV_ADMIN=true`). It previously opened the local cookie path — signed with a default secret when `ADMIN_SESSION_SECRET` is unset — for *any* unrecognised `NODE_ENV`, including production. |
+| CI | `.github/workflows/ci.yml`: `verify` (typecheck · lint · unit · integration · build) then `e2e` (chromium, 1 worker, artifacts on failure). |
+| Visitor-facing copy | The Turnstile failure message no longer leaks an internal `code 600*`. |
+
+## 13. Still open (unchanged by this pass)
+
+1. **Atlas access list** — the cluster is currently unreachable from this machine (`tlsv1 alert internal error` on every shard host, i.e. the connection is refused at the edge, not a credentials problem). Nothing about the MongoDB path has been re-verified live against Atlas since 2026-10-15; `admin_users` is still **0**, so the console cannot be signed into against it.
+2. **Analytics** — `EnquiryForm.tsx` pushes to `window.dataLayer`, which nothing consumes. Wire a provider or delete the dead push; not decided.
+3. **Operational gap (new, not in the original report)** — the outbox is written `pending` and marked `processing`/`sent` by the request that sends it. A crash between the two strands a row in `processing` with no retry path; `claimNotificationMongo` only claims rows that are `failed`. Under the old non-atomic writes this was academic; now that the enquiry unit commits atomically, the notification leg is the weakest remaining link.
+4. Everything in §8 above.

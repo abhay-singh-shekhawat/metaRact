@@ -18,7 +18,7 @@ Gmail SMTP via Nodemailer (log-only fallback in dev), Cloudflare Turnstile
 
 ## Prerequisites
 
-- Node 24 (`cat .nvmrc`), pnpm 10
+- Node 24 (`cat .nvmrc`), pnpm 9.12.0 (pinned in `packageManager`, and what CI installs)
 - No external services required for local dev
 
 ## Local setup
