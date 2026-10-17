@@ -30,8 +30,10 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     siteName: siteConfig.studioName,
-    title: `${siteConfig.studioName} — Websites, Software, Design & AI`,
-    description: "Tell us about your project. A human reviews every brief and replies from your contact details.",
+    // No title/description here on purpose. Setting them made every route share
+    // the homepage's, because the root's explicit openGraph values win over the
+    // page's own resolved metadata — so /pricing was shared as the homepage.
+    // Left unset, Next resolves each route's own title and description.
   },
   robots: { index: true, follow: true },
 };
