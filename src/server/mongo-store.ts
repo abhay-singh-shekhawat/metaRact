@@ -18,6 +18,7 @@ import type {
   OutboxRecord,
 } from "@/server/db";
 import { generateReference } from "@/lib/security/fingerprint";
+import { runAtomically, type MongoSession } from "@/lib/mongodb/transaction";
 import {
   isValidTransition,
   type EnquiryStatus,
@@ -109,13 +110,16 @@ function toOutbox(o: OutboxDoc): OutboxRecord {
   };
 }
 
-async function nextReference(db: Awaited<ReturnType<typeof getDb>>): Promise<string> {
+async function nextReference(
+  db: Awaited<ReturnType<typeof getDb>>,
+  session: MongoSession
+): Promise<string> {
   const res = await db
     .collection<CounterDoc>(COLLECTIONS.counters)
     .findOneAndUpdate(
       { _id: "enquiry_seq" },
       { $inc: { seq: 1 } },
-      { upsert: true, returnDocument: "after" }
+      { upsert: true, returnDocument: "after", session }
     );
   const seq = (res as unknown as { seq: number } | null)?.seq ?? 1;
   return generateReference(new Date().getUTCFullYear(), seq);
@@ -171,42 +175,99 @@ export async function createEnquiryMongo(
   }
 
   const now = new Date().toISOString();
-  const referenceNumber = await nextReference(db);
   const enquiryId = new ObjectId();
+  let referenceNumber: string;
   try {
-    await col.insertOne({
-      _id: enquiryId,
-      referenceNumber,
-      idempotencyKey: data.idempotencyKey,
-      payloadFingerprint: fingerprint,
-      serviceSlug: data.serviceSlug,
-      status: "new",
-      projectTitle: data.projectTitle,
-      projectSummary: data.projectSummary,
-      serviceDetails: data.serviceDetails,
-      name: data.name,
-      email: data.email,
-      emailNormalized: data.emailNormalized,
-      companyOrOrganization: data.companyOrOrganization,
-      phone: data.phone,
-      preferredContactMethod: data.preferredContactMethod,
-      budgetBand: data.budgetBand,
-      timelinePreference: data.timelinePreference,
-      preferredDate: data.preferredDate,
-      referenceUrls: data.referenceUrls,
-      privacyNoticeVersion: data.privacyNoticeVersion,
-      privacyNoticeAcknowledgedAt: now,
-      assignedTo: null,
-      declineReason: null,
-      sourcePath: data.sourcePath,
-      utmSource: data.utmSource,
-      utmMedium: data.utmMedium,
-      utmCampaign: data.utmCampaign,
-      createdAt: now,
-      updatedAt: now,
-      convertedAt: null,
-      archivedAt: null,
-    } as EnquiryDoc);
+    // One unit: the reference number, the enquiry, its first audit event and
+    // both outbox rows. Committed separately, a crash part-way through would
+    // leave a numbered enquiry with no history and no notifications — and the
+    // number itself is drawn from the counter inside this same unit, so a
+    // failed insert does not consume one.
+    referenceNumber = await runAtomically(async (session) => {
+      const reference = await nextReference(db, session);
+      await col.insertOne(
+        {
+          _id: enquiryId,
+          referenceNumber: reference,
+          idempotencyKey: data.idempotencyKey,
+          payloadFingerprint: fingerprint,
+          serviceSlug: data.serviceSlug,
+          status: "new",
+          projectTitle: data.projectTitle,
+          projectSummary: data.projectSummary,
+          serviceDetails: data.serviceDetails,
+          name: data.name,
+          email: data.email,
+          emailNormalized: data.emailNormalized,
+          companyOrOrganization: data.companyOrOrganization,
+          phone: data.phone,
+          preferredContactMethod: data.preferredContactMethod,
+          budgetBand: data.budgetBand,
+          timelinePreference: data.timelinePreference,
+          preferredDate: data.preferredDate,
+          referenceUrls: data.referenceUrls,
+          privacyNoticeVersion: data.privacyNoticeVersion,
+          privacyNoticeAcknowledgedAt: now,
+          assignedTo: null,
+          declineReason: null,
+          sourcePath: data.sourcePath,
+          utmSource: data.utmSource,
+          utmMedium: data.utmMedium,
+          utmCampaign: data.utmCampaign,
+          createdAt: now,
+          updatedAt: now,
+          convertedAt: null,
+          archivedAt: null,
+        } as EnquiryDoc,
+        { session }
+      );
+      await db.collection(COLLECTIONS.events).insertOne(
+        {
+          _id: new ObjectId(),
+          enquiryId,
+          actorUserId: null,
+          eventType: "created",
+          fromStatus: null,
+          toStatus: "new",
+          summary: `Enquiry ${reference} created via ${data.sourcePath || "/start-project"}.`,
+          metadata: { serviceSlug: data.serviceSlug },
+          createdAt: now,
+        },
+        { session }
+      );
+      await db.collection(COLLECTIONS.outbox).insertMany(
+        [
+          {
+            _id: new ObjectId(),
+            enquiryId,
+            notificationType: "team_new_enquiry",
+            recipient: teamRecipient,
+            status: "pending",
+            attemptCount: 0,
+            lastAttemptAt: null,
+            sentAt: null,
+            providerMessageId: null,
+            lastErrorCode: null,
+            createdAt: now,
+          },
+          {
+            _id: new ObjectId(),
+            enquiryId,
+            notificationType: "customer_receipt",
+            recipient: data.emailNormalized,
+            status: "pending",
+            attemptCount: 0,
+            lastAttemptAt: null,
+            sentAt: null,
+            providerMessageId: null,
+            lastErrorCode: null,
+            createdAt: now,
+          },
+        ],
+        { session }
+      );
+      return reference;
+    });
   } catch (e) {
     // Concurrent insert with the same idempotency key: resolve as replay/conflict.
     if ((e as { code?: number })?.code === 11000) {
@@ -225,45 +286,6 @@ export async function createEnquiryMongo(
     throw e;
   }
 
-  await db.collection(COLLECTIONS.events).insertOne({
-    _id: new ObjectId(),
-    enquiryId,
-    actorUserId: null,
-    eventType: "created",
-    fromStatus: null,
-    toStatus: "new",
-    summary: `Enquiry ${referenceNumber} created via ${data.sourcePath || "/start-project"}.`,
-    metadata: { serviceSlug: data.serviceSlug },
-    createdAt: now,
-  });
-  await db.collection(COLLECTIONS.outbox).insertMany([
-    {
-      _id: new ObjectId(),
-      enquiryId,
-      notificationType: "team_new_enquiry",
-      recipient: teamRecipient,
-      status: "pending",
-      attemptCount: 0,
-      lastAttemptAt: null,
-      sentAt: null,
-      providerMessageId: null,
-      lastErrorCode: null,
-      createdAt: now,
-    },
-    {
-      _id: new ObjectId(),
-      enquiryId,
-      notificationType: "customer_receipt",
-      recipient: data.emailNormalized,
-      status: "pending",
-      attemptCount: 0,
-      lastAttemptAt: null,
-      sentAt: null,
-      providerMessageId: null,
-      lastErrorCode: null,
-      createdAt: now,
-    },
-  ]);
   return { ok: true, status: 201, referenceNumber, duplicate: false, enquiryId: enquiryId.toHexString() };
 }
 
@@ -435,26 +457,36 @@ export async function changeStatusMongo(
   if (newStatus === "declined") update.declineReason = reason.slice(0, 2000);
   if (newStatus === "converted") update.convertedAt = now;
   if (newStatus === "archived") update.archivedAt = now;
-  // Optimistic concurrency: fail if another operator moved it first.
-  const res = await col.updateOne({ _id, status: current.status }, { $set: update });
-  if (res.matchedCount === 0) {
+  // Optimistic concurrency: fail if another operator moved it first. The status
+  // the transition was validated against stays in the filter, including across
+  // a driver retry of the transaction, so two operators racing from the same
+  // status still produce exactly one winner.
+  const matched = await runAtomically(async (session) => {
+    const res = await col.updateOne({ _id, status: current.status }, { $set: update }, { session });
+    if (res.matchedCount === 0) return false;
+    await db.collection(COLLECTIONS.events).insertOne(
+      {
+        _id: new ObjectId(),
+        enquiryId: _id,
+        actorUserId: admin.email,
+        eventType: "status_changed",
+        fromStatus: current.status,
+        toStatus: newStatus,
+        summary: `${admin.email} moved ${current.referenceNumber} from ${current.status} to ${newStatus}.`,
+        metadata: { reason: reason.slice(0, 500) },
+        createdAt: now,
+      },
+      { session }
+    );
+    return true;
+  });
+  if (!matched) {
     return {
       ok: false,
       status: 409,
       error: "This enquiry was updated by someone else. Please reload and try again.",
     };
   }
-  await db.collection(COLLECTIONS.events).insertOne({
-    _id: new ObjectId(),
-    enquiryId: _id,
-    actorUserId: admin.email,
-    eventType: "status_changed",
-    fromStatus: current.status,
-    toStatus: newStatus,
-    summary: `${admin.email} moved ${current.referenceNumber} from ${current.status} to ${newStatus}.`,
-    metadata: { reason: reason.slice(0, 500) },
-    createdAt: now,
-  });
   return { ok: true, status: 200 };
 }
 
@@ -490,19 +522,24 @@ export async function assignMongo(
   const current = await col.findOne({ _id }, { projection: { referenceNumber: 1 } });
   if (!current) return { ok: false, status: 404, error: "Not found." };
   const now = new Date().toISOString();
-  await col.updateOne({ _id }, { $set: { assignedTo: trimmed, updatedAt: now } });
-  await db.collection(COLLECTIONS.events).insertOne({
-    _id: new ObjectId(),
-    enquiryId: _id,
-    actorUserId: admin.email,
-    eventType: trimmed ? "assigned" : "unassigned",
-    fromStatus: null,
-    toStatus: null,
-    summary: trimmed
-      ? `${admin.email} assigned ${current.referenceNumber} to ${trimmed}.`
-      : `${admin.email} unassigned ${current.referenceNumber}.`,
-    metadata: {},
-    createdAt: now,
+  await runAtomically(async (session) => {
+    await col.updateOne({ _id }, { $set: { assignedTo: trimmed, updatedAt: now } }, { session });
+    await db.collection(COLLECTIONS.events).insertOne(
+      {
+        _id: new ObjectId(),
+        enquiryId: _id,
+        actorUserId: admin.email,
+        eventType: trimmed ? "assigned" : "unassigned",
+        fromStatus: null,
+        toStatus: null,
+        summary: trimmed
+          ? `${admin.email} assigned ${current.referenceNumber} to ${trimmed}.`
+          : `${admin.email} unassigned ${current.referenceNumber}.`,
+        metadata: {},
+        createdAt: now,
+      },
+      { session }
+    );
   });
   return { ok: true, status: 200 };
 }
@@ -525,27 +562,37 @@ export async function addNoteMongo(
     .findOne({ _id }, { projection: { _id: 1 } });
   if (!exists) return { ok: false, status: 404, error: "Not found." };
   const now = new Date().toISOString();
-  await db.collection(COLLECTIONS.notes).insertOne({
-    _id: new ObjectId(),
-    enquiryId: _id,
-    authorUserId: admin.email,
-    body: trimmed,
-    createdAt: now,
+  const noteId = new ObjectId();
+  const eventId = new ObjectId();
+  await runAtomically(async (session) => {
+    await db.collection(COLLECTIONS.notes).insertOne(
+      {
+        _id: noteId,
+        enquiryId: _id,
+        authorUserId: admin.email,
+        body: trimmed,
+        createdAt: now,
+      },
+      { session }
+    );
+    await db.collection(COLLECTIONS.events).insertOne(
+      {
+        _id: eventId,
+        enquiryId: _id,
+        actorUserId: admin.email,
+        eventType: "internal_note_added",
+        fromStatus: null,
+        toStatus: null,
+        summary: `${admin.email} added an internal note.`,
+        metadata: {},
+        createdAt: now,
+      },
+      { session }
+    );
+    await db
+      .collection(COLLECTIONS.enquiries)
+      .updateOne({ _id }, { $set: { updatedAt: now } }, { session });
   });
-  await db.collection(COLLECTIONS.events).insertOne({
-    _id: new ObjectId(),
-    enquiryId: _id,
-    actorUserId: admin.email,
-    eventType: "internal_note_added",
-    fromStatus: null,
-    toStatus: null,
-    summary: `${admin.email} added an internal note.`,
-    metadata: {},
-    createdAt: now,
-  });
-  await db
-    .collection(COLLECTIONS.enquiries)
-    .updateOne({ _id }, { $set: { updatedAt: now } });
   return { ok: true, status: 201 };
 }
 

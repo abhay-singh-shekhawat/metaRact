@@ -5,16 +5,22 @@ import { randomUUID } from "crypto";
  * Exercises the migrated production storage path (MongoDB Atlas) against an
  * ephemeral in-process MongoDB. When the memory-server binary is unavailable
  * (e.g. offline CI) the whole suite skips instead of failing the build.
+ *
+ * The server is started as a single-node replica set, because that is what the
+ * store's multi-document writes require: a standalone mongod rejects
+ * transactions outright, and everything below would then be testing the
+ * degraded path instead. Standalone is still honoured as a fallback, and the
+ * atomicity test reports which of the two it actually saw.
  */
-type MemServer = { getUri: () => string; stop: () => Promise<boolean> };
+type MemServer = { getUri: () => string; stop: () => Promise<unknown> };
 
 let mem: MemServer | null = null;
 let canRun = false;
-let createServer: ((opts?: unknown) => Promise<MemServer>) | null = null;
+let standalone = false;
+let mms: typeof import("mongodb-memory-server") | null = null;
 
 try {
-  const mod = await import("mongodb-memory-server");
-  createServer = mod.MongoMemoryServer.create.bind(mod.MongoMemoryServer) as never;
+  mms = await import("mongodb-memory-server");
   canRun = true;
 } catch {
   canRun = false;
@@ -54,7 +60,16 @@ const admin = { email: "founder@example.com", role: "owner" as const };
 
 describe.skipIf(!canRun)("mongo store (production path)", () => {
   beforeAll(async () => {
-    mem = await createServer!({ instance: { dbName: "studio_test" } });
+    try {
+      mem = await mms!.MongoMemoryReplSet.create({
+        replSet: { count: 1, dbName: "studio_test" },
+      });
+    } catch {
+      // No replica set available (no wiredTiger, or an offline binary cache):
+      // run against a standalone and let the store take its degraded path.
+      standalone = true;
+      mem = await mms!.MongoMemoryServer.create({ instance: { dbName: "studio_test" } });
+    }
     process.env.MONGODB_URI = mem.getUri();
     process.env.MONGODB_DB_NAME = "studio_test";
     const mod = await import("@/server/mongo-store");
@@ -193,5 +208,42 @@ describe.skipIf(!canRun)("mongo store (production path)", () => {
 
     const claimed = await store.claimNotificationMongo(jobId);
     expect(claimed).toBeNull();
+  });
+
+  it("commits or discards every document in a write unit together", async () => {
+    const { runAtomically, transactionsEnabled } = await import("@/lib/mongodb/transaction");
+    const { getDb } = await import("@/lib/mongodb/client");
+    const { ObjectId } = await import("mongodb");
+    const db = await getDb();
+    const probe = db.collection("atomicity_probe");
+    // Mirrors CounterDoc; typed here so `_id` is the string key it really is.
+    const counters = db.collection<{ _id: string; seq: number }>("counters");
+
+    const _id = new ObjectId();
+    const seqBefore = await counters.findOne({ _id: "enquiry_seq" });
+
+    await expect(
+      runAtomically(async (session) => {
+        await probe.insertOne({ _id, note: "must not survive" }, { session });
+        await counters.updateOne({ _id: "enquiry_seq" }, { $inc: { seq: 1 } }, { session });
+        throw new Error("a later step in the same unit failed");
+      })
+    ).rejects.toThrow("a later step in the same unit failed");
+
+    if (standalone) {
+      // Standalone deployment: the store still writes statement by statement,
+      // so the row the failed unit wrote before its error is visible. That is
+      // the degradation it warns about, and all this case can assert.
+      expect(await probe.countDocuments({ _id })).toBe(1);
+      expect(transactionsEnabled()).toBe(false);
+      return;
+    }
+
+    // The failing unit left nothing behind — including its counter bump, which
+    // is what stops a failed insert from burning a reference number.
+    expect(await probe.countDocuments({ _id })).toBe(0);
+    const seqAfter = await counters.findOne({ _id: "enquiry_seq" });
+    expect(seqAfter?.seq ?? 0).toBe(seqBefore?.seq ?? 0);
+    expect(transactionsEnabled()).toBe(true);
   });
 });

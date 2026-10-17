@@ -45,6 +45,11 @@ export async function getDb(): Promise<Db> {
   return client.db(dbName);
 }
 
+/** The shared client, for the one caller that needs a session (transactions). */
+export async function getClient(): Promise<MongoClient> {
+  return clientPromise();
+}
+
 /** Lightweight connectivity probe for readiness checks. Never throws. */
 export async function pingDb(): Promise<boolean> {
   try {
