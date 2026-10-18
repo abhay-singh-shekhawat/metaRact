@@ -7,8 +7,8 @@ export const primaryNav = [
 ];
 
 export const footerLegal = [
-  { href: "/privacy", label: "Privacy" },
-  { href: "/terms", label: "Terms" },
+  { href: "/privacy", label: "Privacy Policy" },
+  { href: "/terms", label: "Terms of Service" },
   { href: "/cancellation", label: "Cancellation & Refunds" },
-  { href: "/intellectual-property", label: "IP & Portfolio" },
+  { href: "/intellectual-property", label: "Intellectual Property" },
 ];

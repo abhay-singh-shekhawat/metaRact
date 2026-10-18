@@ -249,3 +249,51 @@ Still no live keys. The dev bypass is now **fail-closed**: `verifyTurnstile` ope
 2. **Analytics** — `EnquiryForm.tsx` pushes to `window.dataLayer`, which nothing consumes. Wire a provider or delete the dead push; not decided.
 3. **Operational gap (new, not in the original report)** — the outbox is written `pending` and marked `processing`/`sent` by the request that sends it. A crash between the two strands a row in `processing` with no retry path; `claimNotificationMongo` only claims rows that are `failed`. Under the old non-atomic writes this was academic; now that the enquiry unit commits atomically, the notification leg is the weakest remaining link.
 4. Everything in §8 above.
+
+---
+
+# Policy pages and the published name — 2026-10-18 (on `main`, merged from `chore/hardening`)
+
+Everything above is the record of the 2026-10-17 hardening pass and is left as written. This section covers the policy-page pass that followed it.
+
+## 14. What was supplied
+
+The operator delivered four finished policy documents as markdown — 56 numbered sections in total — and they name the business **Metaract**. Until this pass the repository had no policy text: the four pages carried short summaries written in-house and each was topped by a "Draft — pending business and legal review" notice.
+
+The delivered files are archived outside the repository at `D:\TEMP\opencode\legal-supplied-originals-20261018`. The published text is `docs/legal/*.md`, and the seven edits applied to the supplied wording are recorded one by one, with before/after, in `docs/legal/DEVIATIONS.md`. The rules — no paraphrase, no invented business facts, no unfinished notes on a public page — are in `docs/legal/README.md`, and the design decision is ADR-009.
+
+What the documents deliberately do **not** state is also worth recording: the contracting entity, any registered address or number, the payment provider, and any statutory grievance route are left to the project agreement. They were not guessed at, and no contact address was invented to fill the gap.
+
+## 15. Gate results (this pass)
+
+| Gate | Command | Result |
+|---|---|---|
+| Typecheck | `pnpm typecheck` | ✅ exit 0 |
+| Lint | `pnpm lint` | ✅ exit 0, 0 warnings |
+| Unit tests | `pnpm test` | ✅ **56/56** (was 44) |
+| Integration tests | `pnpm test:integration` | ✅ **12/12** |
+| Production build | `pnpm build` | ✅ exit 0 — policy routes prerendered static |
+| E2E (chromium + Pixel 7) | `pnpm test:e2e` | ✅ **94/94** (was 84) |
+
+The policy pages build as static, 175 B of page JS each: the ~45 KB of policy text is server-rendered and never enters a client bundle.
+
+## 16. What changed
+
+| Change | Note |
+|---|---|
+| Policy text | `docs/legal/*.md` is the source of truth; `pnpm legal:import` generates `src/content/legal/*.ts`; `LegalPage` renders them. The generator refuses to write anything if a document uses markdown outside a small, documented subset. |
+| Fidelity gate | `tests/unit/legal-content.test.ts` rebuilds the markdown from the published modules and compares it to the files, and proves the inline splitting is lossless for every published string. Editing the generated modules by hand fails the gate. |
+| Browser gate | `tests/e2e/legal.spec.ts` reads the markdown at run time and asserts each page publishes every heading in order, states its version and date, offers a working contents rail, and links to the other policies but never to itself. |
+| Edits to the supplied text | Seven, all recorded. Sentences addressed to the operator became the operator's own commitments in the first person the documents already use; one broken sentence in the Cancellation §9 was repaired without dropping either timing source. Asserted in both directions by the unit gate. |
+| The published name | `src/config/site.ts` now defaults to **Metaract** and still fails closed on a placeholder; `scripts/check-production-config.ts` imports that rule instead of duplicating it, so the preflight is no longer "set the env var" but "never deploy a placeholder". |
+| Version provenance | `PRIVACY_NOTICE_VERSION` was removed. It was read by a **client** component to display the version, and a non-`NEXT_PUBLIC_` variable is invisible to client bundles — so the form could show a different version from the one stored against the enquiry. `legalConfig` in `src/config/legal.ts` is now the single source, and it is a literal. |
+| Terminology | User-facing copy says "Privacy Policy" (form label, its link, the validation message, footer labels). The persisted field names (`privacyNoticeAcknowledged`, `privacyNoticeVersion`) were left alone rather than migrated, and the divergence is noted in ADR-009. |
+| Print | `@media print` hides the site chrome, the contents rail and the cross-link blocks, and keeps a section heading with the text it introduces. |
+| Removed | `PolicyShell`/`policyLayout` (replaced by `LegalPage`); the "Draft — pending business and legal review" notice; the `Your Studio Name` placeholder in `.env.example` and `docs/architecture.md`. |
+
+## 17. Open items from this pass
+
+1. **Legal review.** The text is published as supplied, dated, with no "pending review" marker — on the operator's explicit instruction. The documents were authored to be reviewed; nothing in this pass substitutes for that review, and §14 lists the facts they deliberately leave open.
+2. **"Six service areas" versus five.** Terms §3 lists six service areas (splitting custom software from application development) while `enabledServices()` returns five categories. A wording mismatch inside a legal document is not the app's to reconcile, so it is flagged rather than silently edited.
+3. **No policy for the enquiry form's retention claim.** The privacy policy states retention principles; the `ENQUIRY_RETENTION_MONTHS` operational setting (12) is the concrete figure. If a deletion job is ever expected, it does not exist yet.
+4. Everything in §13 above — Atlas is still unreachable from this machine, `admin_users` is still 0, and the analytics decision (`window.dataLayer`) is still open. The dead `dataLayer` push is now the only remaining "does this control do anything?" question in the codebase.

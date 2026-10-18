@@ -14,6 +14,7 @@
     "test:e2e": "playwright test",
     "db:reset": "tsx scripts/db-reset.ts",
     "check:production-config": "tsx scripts/check-production-config.ts",
+    "legal:import": "tsx scripts/import-legal.ts",
     "bootstrap-admin": "tsx --conditions=react-server scripts/bootstrap-admin.ts"
   },
   "dependencies": {

@@ -104,7 +104,7 @@ export const enquiryRequestSchema = z.object({
   name: z.string().trim().min(2).max(120),
   email: z.string().trim().max(254).email("Enter a valid email address."),
   privacyNoticeAcknowledged: z.literal(true, {
-    errorMap: () => ({ message: "Please acknowledge the privacy notice." }),
+    errorMap: () => ({ message: "Please acknowledge the Privacy Policy." }),
   }),
   privacyNoticeVersion: z.string().max(20).optional(),
   companyOrOrganization: z.string().trim().max(160).optional().default(""),

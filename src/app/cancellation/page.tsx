@@ -1,16 +1,18 @@
-import { PolicyShell, policyLayout } from "@/components/marketing/PolicyShell";
+import type { Metadata } from "next";
+import { LegalPage } from "@/components/marketing/LegalPage";
+import { siteConfig } from "@/config/site";
+import { cancellationRefundPolicyDoc } from "@/content/legal/cancellation-refund-policy";
 
-export const metadata = policyLayout("Cancellation & Refunds", "How cancellation and refunds work once a written quote exists.");
+export const metadata: Metadata = {
+  title: cancellationRefundPolicyDoc.title,
+  description: `How cancellation, refunds, pauses and third-party expenses work on a ${siteConfig.studioName} project, before and after 25% of the agreed timeline has elapsed.`,
+};
 
-export default function CancellationPage() {
+export default function CancellationPolicyPage() {
   return (
-    <PolicyShell title="Cancellation & refunds" lead="No online payments are taken on this site. If a quoted engagement is cancelled, the written quote's terms decide what happens next.">
-      <h2 className="font-semibold text-[#151923]">Before a quote</h2>
-      <p>Withdrawing an enquiry is free — just reply to our email or use the contact page with your reference number.</p>
-      <h2 className="font-semibold text-[#151923]">After a quote is accepted</h2>
-      <p>Cancellation, refunds, and payment for work already performed follow the milestones and terms in the accepted written quote. Where the quote is silent, the parties agree a fair settlement in writing before handover.</p>
-      <h2 className="font-semibold text-[#151923]">Third-party costs</h2>
-      <p>Non-recoverable third-party expenses already incurred (domains, licences, API usage) are not refundable through the studio.</p>
-    </PolicyShell>
+    <LegalPage
+      doc={cancellationRefundPolicyDoc}
+      lead="How cancellation, refunds, pauses and third-party expenses work — before 25% of an agreed project timeline has elapsed, and at or after it."
+    />
   );
 }

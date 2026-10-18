@@ -1198,3 +1198,32 @@ body {
     animation: page-in var(--t-base) var(--ease-out) both;
   }
 }
+
+/* ==========================================================================
+   Print — the policy pages are the ones people actually print (DESIGN.md §5)
+   ========================================================================== */
+
+@media print {
+  /* The site chrome and the on-screen contents rail are not part of the document. */
+  body > header,
+  body > footer,
+  .legal-toc,
+  .no-print {
+    display: none !important;
+  }
+
+  .legal-article {
+    max-width: none;
+    color: #000;
+  }
+
+  /* Keep a section heading with the text it introduces. */
+  .legal-article h2 {
+    break-after: avoid;
+  }
+
+  .legal-article a {
+    color: inherit;
+    text-decoration: none;
+  }
+}

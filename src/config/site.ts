@@ -1,5 +1,19 @@
+import { legalConfig } from "./legal";
+
+/**
+ * The name the business is published under. Real since 2026-10-18: the supplied
+ * policy documents name it, so it is a configured fact rather than a placeholder
+ * awaiting one (docs/legal/). `NEXT_PUBLIC_STUDIO_NAME` can still override it.
+ */
+const DEFAULT_STUDIO_NAME = "Metaract";
+
+/** Values that mean "nobody has supplied a real name", and must fail the preflight. */
+export const PLACEHOLDER_STUDIO_NAMES = ["", "Your Studio Name"];
+
+const studioName = (process.env.NEXT_PUBLIC_STUDIO_NAME ?? DEFAULT_STUDIO_NAME).trim();
+
 export const siteConfig = {
-  studioName: process.env.NEXT_PUBLIC_STUDIO_NAME || "Your Studio Name",
+  studioName,
   siteUrl: (process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000").replace(/\/$/, ""),
   tagline: "A small studio for websites, software, design, and applied AI.",
   heroTitle: "Have an idea? Let's scope it properly.",
@@ -9,9 +23,9 @@ export const siteConfig = {
   secondaryCta: "Explore Our Work",
   contactEmail: process.env.NEXT_PUBLIC_CONTACT_EMAIL || "",
   whatsappUrl: process.env.NEXT_PUBLIC_WHATSAPP_URL || "",
-  privacyNoticeVersion: process.env.PRIVACY_NOTICE_VERSION || "2026-10-01",
+  privacyNoticeVersion: legalConfig.version,
   responseNote: "We review every request by hand and reply from the contact details you share.",
-  isPlaceholderName: !process.env.NEXT_PUBLIC_STUDIO_NAME || process.env.NEXT_PUBLIC_STUDIO_NAME === "Your Studio Name",
+  isPlaceholderName: PLACEHOLDER_STUDIO_NAMES.includes(studioName),
 };
 
 export function isProductionConfigValid(): { ok: boolean; missing: string[] } {
