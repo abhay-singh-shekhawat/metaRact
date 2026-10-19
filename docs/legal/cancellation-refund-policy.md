@@ -1,0 +1,63 @@
+# Cancellation and Refund Policy
+
+
+## 1. Purpose and priority
+
+This policy explains how cancellation, termination and refunds work for services provided under the name **Metaract** ("we", "us" or "our"). It applies to website development, custom software, applications, UI/UX design and prototyping, graphic design, and AI/LLM projects.
+
+The accepted quote, statement of work (SOW), or other written project agreement may set project-specific milestones, payment terms or cancellation terms. Those terms apply where they clearly differ from this policy, subject to mandatory law. Nothing in this policy removes rights you cannot legally waive.
+
+**Cancellation requests and support:** Use the agreed communication channel for the project, including the DM channel used for project communications.
+
+## 2. How to cancel
+
+Send a written request through the agreed client communication channel, including the DM channel used for project communications. Include your name, project reference, the project being cancelled, and the requested effective date. We will acknowledge the request and confirm the work completed, committed external expenses, any amount due, and any refundable balance. A request to change a deadline or reduce scope is not automatically a cancellation; we will confirm how it will be treated.
+
+## 3. Cancellation before 25% of the project timeline has elapsed
+
+The project timeline means the total duration stated in the accepted quote or statement of work, measured from the agreed project start date to the agreed target completion date, unless the project agreement defines it differently. The 25% point is measured by elapsed time, not by the percentage of work completed. The quote should record the start date and target completion date so this calculation is clear.
+
+If you cancel before 25% of the agreed project timeline has elapsed, Metaract’s standard rule is to deduct 25% of the advance payment actually received (not 25% of the total project price) and refund the remaining advance balance. For example, if the advance received was ₹10,000, the standard deduction would be ₹2,500 and the remaining ₹7,500 would be refundable. Any separate third-party expense may be deducted only if it was properly disclosed or authorised, documented, and may lawfully be retained. This rule is subject to mandatory law, consumer rights, the circumstances of the cancellation, and any different lawful written term agreed for that project.
+
+## 4. Cancellation at or after 25% of the project timeline has elapsed
+
+If you cancel at or after 25% of the agreed project timeline has elapsed, Metaract’s standard rule is that the advance payment is non-refundable, subject to applicable law, mandatory consumer rights, the circumstances of the cancellation, and any different lawful written term expressly agreed for the project. We state this rule in the quote before you accept it. It does not automatically make separate, unearned milestone payments or unrelated amounts non-refundable, and it cannot remove a remedy required by law where Metaract fails to perform its obligations.
+
+For every cancellation, we will confirm in writing the effective cancellation date, elapsed timeline percentage, advance and other payments received, work completed, authorised external expenses, and the refund calculation. Any dispute about the calculation or mandatory legal rights can be raised through the contact process below.
+
+## 5. Refunds for milestones, drafts and digital deliverables
+
+A milestone payment may become earned when the milestone and its stated deliverables have been completed under the agreed acceptance criteria. If a project is cancelled part-way through a milestone, we will use the project agreement or a documented calculation of work actually performed to determine the amount due.
+
+Where it is practical, lawful, and consistent with the project agreement, we may provide paid-for, separable work-in-progress so you can continue the project elsewhere. You do not automatically receive unfinished source files, reusable agency tools, third-party materials or rights that have not been paid for or licensed to you. Intellectual-property rights are governed by the project agreement and our Intellectual Property Policy.
+
+If delivered work materially fails the written acceptance criteria, contact us with the project reference and a clear description of the issue. We will review it and apply the agreed correction, re-performance, refund or other remedy, together with any remedies required by law. A subjective change of preference after work conforms to the agreed scope is not automatically a defect, but we will consider reasonable solutions.
+
+## 6. Cancellation by the Agency
+
+We may need to stop or cancel a project if it becomes unlawful, materially unsafe, technically infeasible, dependent on unavailable rights or access, or impossible to perform after reasonable attempts to resolve the issue. Where practical, we will discuss alternatives first.
+
+If we cancel a project for a reason not caused by your breach or failure to cooperate, we will provide the deliverables properly completed and paid for where possible, and refund prepaid fees for services we will not perform, less only authorised, documented amounts that may lawfully be retained. If we suspend or terminate because of a material breach, overdue payment or missing client cooperation, we will provide notice and a reasonable opportunity to address the issue where appropriate, then settle accounts under the project agreement and applicable law.
+
+## 7. Third-party expenses
+
+Examples of external expenses include domain registration, hosting, cloud compute, paid model/API usage, software licences, paid fonts or images, app-store fees, SMS/email usage, printing, shipping and payment-provider charges. Such expenses are separate from our service fee unless the quote explicitly bundles them.
+
+Refund eligibility for an external expense depends on the third party's terms and whether the charge is recoverable. We will not describe an expense as non-refundable merely by category; where we deduct a cost, we will identify the cost and its basis. You remain responsible for recurring subscriptions on accounts you own until you cancel them with the provider.
+
+## 8. Changes, pauses and client delays
+
+A request to add or materially change requirements may change the price or schedule and will be handled through the change-request process in the project agreement. If a project is paused because we are waiting for your content, decisions, access or payment, delivery dates may move. If a project remains inactive for a reasonable period based on the project circumstances, we may send a written reminder and propose a revised schedule, a paid restart or closure of the project. Any restart fee or inactivity charge must be disclosed in the accepted project agreement or agreed in writing before it is charged.
+
+## 9. How refunds are processed
+
+After we confirm the final cancellation calculation, approved refunds will be initiated within the period stated in the accepted quote or communicated in writing for the cancellation, and otherwise within a reasonable period after the refund amount is confirmed, to the original payment method where possible. Your bank, payment provider or payment method may take additional time to post the funds. If payment to the original method is not possible, we will agree a lawful alternative with you.
+
+## 10. How to raise a concern
+
+Contact the agreed communication channel with the project reference, invoice or payment reference, and the reason you believe a refund or correction is due. We will review the request and explain our calculation. This process does not limit any statutory complaint or dispute-resolution rights available to you.
+
+## 11. Contact
+
+**Metaract**  
+**Cancellation and refund contact:** Use the agreed communication channel for the project, including the DM channel used for project communications.

@@ -90,6 +90,15 @@ html {
   -webkit-text-size-adjust: 100%;
 }
 
+/* Lenis marks <html> with `.lenis` while it is driving the scroll axis. Native
+   smooth scrolling would fight its per-frame scrollTo, so it is switched off
+   only then: the CSS fallback still covers no-JS, reduced motion, and the admin
+   surfaces, which deliberately keep the native axis. Next.js separately forces
+   inline `scroll-behavior: auto` for the duration of a route transition. */
+html.lenis {
+  scroll-behavior: auto;
+}
+
 /* Touch targets: drop the 300ms double-tap-zoom delay on controls. */
 a,
 button,
@@ -330,6 +339,29 @@ body {
     transform: scaleX(1);
   }
 
+  /* Interactive card that carries a pointer-following light (React Bits
+     `SpotlightCard`, see THIRD-PARTY-NOTICES.md). The chrome is bound to the
+     same tokens as `.surface-link` so the two card styles are one object; only
+     the light is new. `--spotlight-shadow` is a one-step indirection: the
+     component writes its palette variables inline, and inline custom
+     properties cannot be restyled by a class, so hover deepens the shadow
+     through a variable the class owns. */
+  .surface-spotlight {
+    --spotlight-shadow: var(--shadow-rest);
+    transition:
+      transform var(--t-base) var(--ease-out),
+      box-shadow var(--t-base) var(--ease-out);
+  }
+
+  .surface-spotlight:hover {
+    --spotlight-shadow: var(--shadow-hover);
+    transform: translateY(-2px);
+  }
+
+  .surface-spotlight:active {
+    transform: translateY(0);
+  }
+
   .chip {
     display: inline-flex;
     align-items: center;
@@ -343,6 +375,236 @@ body {
     letter-spacing: 0.04em;
     color: var(--ink-2);
     white-space: nowrap;
+  }
+
+  /* ==========================================================================
+     Founder bench (/about)
+
+     A person is not a link, so the card itself has no href: it carries the two
+     profiles that actually exist, and everything else is enhancement around
+     them. The links are visible at rest, which keeps touch and no-hover
+     browsers whole; motion is decided at the component boundary
+     (FounderCard.tsx), so these rules only describe how the bench looks when a
+     device is allowed to move it.
+     ========================================================================== */
+
+  .founder-stage {
+    perspective: 1200px;
+  }
+
+  .founder-card {
+    position: relative;
+    transform-style: preserve-3d;
+    transform: rotateX(var(--fc-rx, 0deg)) rotateY(var(--fc-ry, 0deg))
+      translateY(var(--fc-lift, 0px));
+    transition:
+      transform var(--t-base) var(--ease-out),
+      opacity var(--t-base) var(--ease-out);
+  }
+
+  /* One card in play, the other two step back. Pointer or keyboard. */
+  @media (hover: hover) {
+    .founder-stage:has(.founder-card:hover) .founder-card:not(:hover):not(:focus-within) {
+      opacity: 0.6;
+    }
+  }
+
+  /* The card becomes a surface while it is in play: sides and foot only, because
+     the hairline above it is already the top edge. Bleeds 12px outside the grid
+     cell so the content gains padding without anything moving. */
+  .founder-card::before {
+    content: "";
+    position: absolute;
+    inset: 0 -0.75rem -0.75rem;
+    z-index: -1;
+    border: 1px solid var(--line);
+    border-top: 0;
+    border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+    background: var(--surface);
+    box-shadow: 0 20px 36px -30px rgba(11, 15, 23, 0.35);
+    opacity: 0;
+    transition: opacity var(--t-base) var(--ease-out);
+  }
+
+  .founder-card:focus-within::before {
+    opacity: 1;
+  }
+
+  @media (hover: hover) {
+    .founder-card:hover::before {
+      opacity: 1;
+    }
+  }
+
+  /* The rule above the card draws itself in accent as the card wakes up. */
+  .founder-card::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: var(--accent);
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform var(--t-slow) var(--ease-out);
+  }
+
+  .founder-card:focus-within::after {
+    transform: scaleX(1);
+  }
+
+  @media (hover: hover) {
+    .founder-card:hover::after {
+      transform: scaleX(1);
+    }
+  }
+
+  /* Depth: avatar furthest forward, name behind it, links almost on the page.
+     Small steps — enough to feel physical, not enough to smear the text. The
+     portrait steps further out again while the card is in play. */
+  .founder-avatar {
+    transform: translateZ(24px);
+    transition: transform var(--t-slow) var(--ease-out);
+  }
+
+  .founder-card:focus-within .founder-avatar {
+    transform: translateZ(44px) scale(1.02);
+  }
+
+  @media (hover: hover) {
+    .founder-card:hover .founder-avatar {
+      transform: translateZ(56px) scale(1.03);
+    }
+  }
+
+  .founder-copy {
+    transform: translateZ(12px);
+  }
+
+  .founder-links {
+    transform: translateZ(6px);
+  }
+
+  .founder-index {
+    transition: color var(--t-fast) var(--ease-out);
+  }
+
+  @media (hover: hover) {
+    .founder-card:hover .founder-index {
+      color: var(--accent);
+    }
+  }
+
+  /* A hairline ring that becomes a slow conic sweep while the card is in play.
+     Masked to a 2px band so the gradient never crosses the portrait. */
+  .founder-ring {
+    position: relative;
+    background: var(--line-2);
+  }
+
+  .founder-ring::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    border-radius: inherit;
+    padding: 2px;
+    background: conic-gradient(
+      from 0deg,
+      transparent 0deg 110deg,
+      var(--accent) 180deg,
+      transparent 250deg 360deg
+    );
+    -webkit-mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+    mask-composite: exclude;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--t-base) var(--ease-out);
+  }
+
+  .founder-card:focus-within .founder-ring::before {
+    opacity: 1;
+    animation: founder-ring 7s linear infinite;
+  }
+
+  @media (hover: hover) {
+    .founder-card:hover .founder-ring::before {
+      opacity: 1;
+      animation: founder-ring 7s linear infinite;
+    }
+  }
+
+  /* Profile links, rendered at rest: nothing is hidden behind a hover. */
+  .founder-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    min-height: 32px;
+    padding: 0.25rem 0.625rem;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--ink-2);
+    transition:
+      color var(--t-fast) var(--ease-out),
+      border-color var(--t-fast) var(--ease-out),
+      background var(--t-fast) var(--ease-out);
+  }
+
+  .founder-link svg {
+    transition: transform var(--t-base) var(--ease-out);
+  }
+
+  .founder-link:hover,
+  .founder-link:focus-visible {
+    color: var(--accent);
+    border-color: var(--accent);
+    background: var(--accent-soft);
+  }
+
+  .founder-link:hover svg {
+    transform: translate(2px, -2px);
+  }
+
+  /* Touch has no hover, so the chip answers the press instead. */
+  .founder-link:active {
+    color: var(--accent);
+    border-color: var(--accent);
+    background: var(--accent-soft);
+  }
+
+  /* Tablet: one column of full-width rows until there is room for three
+     columns. Two columns would leave a hole under a three-person bench. */
+  @media (min-width: 640px) and (max-width: 1023px) {
+    .founder-stage > .founder-card {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1.5rem;
+    }
+
+    .founder-stage > .founder-card .founder-links {
+      margin-top: 0;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .founder-card {
+      transform: none;
+      transform-style: flat;
+    }
+    .founder-link:hover svg {
+      transform: none;
+    }
   }
 
   /* ==========================================================================
@@ -787,9 +1049,12 @@ body {
   }
 
   .hero-viewswitch {
-    display: inline-flex;
-    align-items: center;
-    gap: 2px;
+    position: relative;
+    display: inline-grid;
+    grid-auto-flow: column;
+    /* Equal segments, so the sliding thumb lands exactly on either label with
+       nothing measured at runtime. */
+    grid-auto-columns: 1fr;
     padding: 3px;
     border-radius: 999px;
     border: 1px solid var(--line-2);
@@ -801,10 +1066,37 @@ body {
       background-color var(--t-base) var(--ease-out);
   }
 
+  /* The thumb is driven by the stage's own data-mode attribute rather than by
+     :has() on the button's aria-pressed, so the slide and the rendered object
+     can never disagree about which view is live. */
+  .hero-viewswitch::before {
+    content: "";
+    position: absolute;
+    z-index: 0;
+    top: 3px;
+    bottom: 3px;
+    left: 3px;
+    width: calc(50% - 3px);
+    border-radius: 999px;
+    background: var(--ink);
+    box-shadow: var(--shadow-rest);
+    transition:
+      transform var(--t-base) var(--ease-out),
+      background-color var(--t-base) var(--ease-out);
+  }
+
+  .hero-stage[data-mode="blueprint"] .hero-viewswitch::before {
+    transform: translateX(100%);
+    background: #fff;
+  }
+
   .hero-viewswitch button {
+    position: relative;
+    z-index: 1;
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    gap: 0.4rem;
     min-height: 34px;
     padding-inline: 0.9rem;
     border: 0;
@@ -814,9 +1106,25 @@ body {
     font-weight: 600;
     color: var(--ink-2);
     cursor: pointer;
-    transition:
-      color var(--t-fast) var(--ease-out),
-      background-color var(--t-fast) var(--ease-out);
+    transition: color var(--t-fast) var(--ease-out);
+  }
+
+  /* Filled square = the object as a material render; hollow square = the same
+     object as a line drawing. Decorative only — the labels say it in words. */
+  .hero-viewswitch button::before {
+    content: "";
+    flex: none;
+    width: 9px;
+    height: 9px;
+    border-radius: 2px;
+  }
+
+  .hero-viewswitch button:first-child::before {
+    background: currentColor;
+  }
+
+  .hero-viewswitch button:last-child::before {
+    border: 1px solid currentColor;
   }
 
   .hero-viewswitch button:hover {
@@ -824,7 +1132,6 @@ body {
   }
 
   .hero-viewswitch button[aria-pressed="true"] {
-    background: var(--ink);
     color: #fff;
   }
 
@@ -842,7 +1149,6 @@ body {
   }
 
   .hero-stage[data-mode="blueprint"] .hero-viewswitch button[aria-pressed="true"] {
-    background: #fff;
     color: var(--studio);
   }
 
@@ -1182,6 +1488,12 @@ body {
   }
 }
 
+@keyframes founder-ring {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
 @media (prefers-reduced-motion: no-preference) {
   .rise {
     animation: rise var(--t-slow) var(--ease-out) both;
@@ -1196,5 +1508,34 @@ body {
      (/start-project, /services/[slug], /work/[slug], ProcessRail) — DESIGN.md §6. */
   .page-enter {
     animation: page-in var(--t-base) var(--ease-out) both;
+  }
+}
+
+/* ==========================================================================
+   Print — the policy pages are the ones people actually print (DESIGN.md §5)
+   ========================================================================== */
+
+@media print {
+  /* The site chrome and the on-screen contents rail are not part of the document. */
+  body > header,
+  body > footer,
+  .legal-toc,
+  .no-print {
+    display: none !important;
+  }
+
+  .legal-article {
+    max-width: none;
+    color: #000;
+  }
+
+  /* Keep a section heading with the text it introduces. */
+  .legal-article h2 {
+    break-after: avoid;
+  }
+
+  .legal-article a {
+    color: inherit;
+    text-decoration: none;
   }
 }

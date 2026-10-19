@@ -50,6 +50,12 @@ export const E2E_SERVER_ENV: Record<string, string> = {
   NEXT_PUBLIC_TURNSTILE_SITE_KEY: TURNSTILE_TEST_SITE_KEY,
   ADMIN_DEV_EMAIL: E2E_ADMIN_EMAIL,
   ADMIN_DEV_PASSWORD: E2E_ADMIN_PASSWORD,
+  // The published name is pinned rather than inherited: `@next/env` only fills a
+  // key that is undefined, so a developer's `.env.local` would otherwise decide
+  // what the specs are asserting about titles and metadata. Pinning it here also
+  // records that the suite's expectations include the real name, not the old
+  // "Your Studio Name" placeholder.
+  NEXT_PUBLIC_STUDIO_NAME: "Metaract",
   // No real email may leave a test run. getEmailMode() returns "smtp" the
   // moment GMAIL_USER + GMAIL_APP_PASSWORD + EMAIL_FROM are all set, which they
   // are in a developer's .env.local — so without these overrides the suite

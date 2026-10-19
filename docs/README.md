@@ -4,5 +4,7 @@
 - [`PROJECT-REPORT.md`](PROJECT-REPORT.md) — complete project/codebase/architecture/schema report.
 - [`MIGRATION-VERIFICATION-REPORT.md`](MIGRATION-VERIFICATION-REPORT.md) — verification of the MongoDB Atlas + Gmail SMTP migration (gates, live proof, bug fixed, open issues).
 - [`adr/`](adr/) — architecture decision records (supersede the spec where noted).
+- [`legal/`](legal/) — the published policy text (source of truth), how it reaches the
+  pages, and the audit of edits applied to the supplied documents.
 - `../README.md` — setup, commands, deployment.
 - `../SECURITY.md` — reporting, rotation, revocation, incidents, backups.

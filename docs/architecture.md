@@ -1222,7 +1222,8 @@ Required/expected variables:
 ```dotenv
 # Public site config (safe to expose only where prefixed NEXT_PUBLIC_)
 NEXT_PUBLIC_SITE_URL=http://localhost:3000
-NEXT_PUBLIC_STUDIO_NAME=Your Studio Name
+# Optional: the published name is configured in src/config/site.ts (docs/legal/).
+NEXT_PUBLIC_STUDIO_NAME=
 NEXT_PUBLIC_TURNSTILE_SITE_KEY=
 
 # MongoDB Atlas — server only, never use NEXT_PUBLIC_ prefix
@@ -1247,7 +1248,6 @@ UPSTASH_REDIS_REST_TOKEN=
 
 # Admin bootstrap / operational policy
 ADMIN_BOOTSTRAP_ALLOWED=false
-PRIVACY_NOTICE_VERSION=2026-10-01
 ENQUIRY_RETENTION_MONTHS=12
 LOG_RETENTION_DAYS=30
 
@@ -1260,7 +1260,7 @@ Do not expose `MONGODB_URI`, `GMAIL_APP_PASSWORD`, `TURNSTILE_SECRET_KEY`, or `U
 Production configuration rules:
 
 - `NEXT_PUBLIC_SITE_URL` must be the canonical HTTPS production origin, no trailing-path ambiguity.
-- `NEXT_PUBLIC_STUDIO_NAME` must not be a placeholder.
+- The studio name must not be a placeholder. It is configured in `src/config/site.ts` (the supplied policies in `docs/legal/` name the business); `NEXT_PUBLIC_STUDIO_NAME` overrides it, and `pnpm check:production-config` fails if the resolved name is a placeholder.
 - Turnstile and rate limiter secrets must be present; production submission must fail closed if they are missing.
 - `EMAIL_FROM` must be the authenticated Gmail sender; `INTERNAL_NOTIFICATION_EMAIL` must be configured and monitored.
 - Admin users must be created through the documented bootstrap script, which stores only a bcrypt password hash.

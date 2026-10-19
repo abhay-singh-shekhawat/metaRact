@@ -21,7 +21,7 @@ test("home -> service -> start-project -> submit -> reference shown", async ({ p
   );
   await page.getByLabel(/Your name/i).fill("E2E Tester");
   await page.getByLabel(/^Email/i).fill(`e2e-${Date.now()}@example.com`);
-  await page.getByRole("checkbox", { name: /privacy notice/i }).check();
+  await page.getByRole("checkbox", { name: /privacy policy/i }).check();
   await page.getByRole("button", { name: /Submit enquiry/i }).click();
   // Generous: the first enquiry in a run makes the dev server compile the route.
   await expect(page.getByText(/Request received/i)).toBeVisible({ timeout: 15_000 });

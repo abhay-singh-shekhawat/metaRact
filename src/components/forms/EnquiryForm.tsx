@@ -328,7 +328,7 @@ export function EnquiryForm({ preselected }: { preselected?: string }) {
       <ReadinessStrip readiness={readiness} />
 
       <p id="form-intro" className="text-[14.5px] leading-relaxed text-[var(--ink-2)]">
-        Plain language is fine. Fields marked * are required. We acknowledge privacy notice version {siteConfig.privacyNoticeVersion}. Please don&apos;t send passwords, keys, or sensitive data.
+        Plain language is fine. Fields marked * are required. We record Privacy Policy version {siteConfig.privacyNoticeVersion} with your brief. Please don&apos;t send passwords, keys, or sensitive data.
       </p>
 
       {topError && (
@@ -600,8 +600,8 @@ export function EnquiryForm({ preselected }: { preselected?: string }) {
         <div className="flex cursor-pointer items-start gap-3 text-[14.5px]">
           <input id="privacy" type="checkbox" name="privacy" required aria-describedby="privacy-detail" className="mt-1 h-5 w-5 accent-[var(--accent)]" />
           <span>
-            <label htmlFor="privacy">I have read the privacy notice and understand my brief will be used to review and respond to my enquiry. *</label>
-            <span id="privacy-detail" className="mt-1 block text-[13px] text-[var(--ink-3)]">Please read the <a href="/privacy" className="font-semibold text-[var(--accent)] hover:underline" target="_blank" rel="noreferrer">privacy notice</a> before submitting.</span>
+            <label htmlFor="privacy">I have read the Privacy Policy and understand my brief will be used to review and respond to my enquiry. *</label>
+            <span id="privacy-detail" className="mt-1 block text-[13px] text-[var(--ink-3)]">Please read the <a href="/privacy" className="font-semibold text-[var(--accent)] hover:underline" target="_blank" rel="noreferrer">Privacy Policy</a> before submitting.</span>
           </span>
         </div>
         {err("privacyNoticeAcknowledged") && <p className={errCls}>{err("privacyNoticeAcknowledged")}</p>}

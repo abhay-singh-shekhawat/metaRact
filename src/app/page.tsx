@@ -8,6 +8,9 @@ import { Reveal } from "@/components/motion/Reveal";
 import { Magnetic } from "@/components/motion/Magnetic";
 import { DraftingLamp } from "@/components/motion/DraftingLamp";
 import { HeroStage } from "@/components/marketing/hero/HeroStage";
+import { WorkRow } from "@/components/marketing/WorkRow";
+import { SpotlightSurface } from "@/components/marketing/SpotlightSurface";
+import { ProcessRail } from "@/components/motion/ProcessRail";
 
 export const metadata: Metadata = {
   title: `${siteConfig.studioName} — Websites, Software, Design & AI`,
@@ -66,7 +69,7 @@ export default function HomePage() {
       </section>
 
       {/* ── Facts strip ───────────────────────────────────────────────────── */}
-      <section className="border-b border-[var(--line)] bg-[var(--canvas)]">
+      <section className="border-b border-[var(--line)] bg-[var(--surface)]">
         <div className="container-studio grid divide-y divide-[var(--line)] sm:grid-cols-3 sm:divide-x sm:divide-y-0">
           {[
             ["Every brief is read by a person", "No routing bots, no auto-acceptance."],
@@ -111,27 +114,7 @@ export default function HomePage() {
             <ol className="mt-10 border-t border-[var(--line)]">
               {work.slice(0, 4).map((w, i) => (
                 <Reveal as="li" key={w.slug} delay={i * 70} className="border-b border-[var(--line)]">
-                  <Link
-                    href={`/work/${w.slug}`}
-                    className="group grid grid-cols-[auto_1fr] items-start gap-x-6 gap-y-3 py-7 transition-colors hover:bg-[var(--surface-2)] md:grid-cols-[64px_1fr_auto] md:items-center md:gap-x-8"
-                  >
-                    <span className="meta pt-1 md:pt-0">{String(i + 1).padStart(2, "0")}</span>
-                    <span>
-                      <span className="flex flex-wrap items-center gap-3">
-                        <span className="display-h3 group-hover:text-[var(--accent)]">{w.title}</span>
-                        {w.isConcept && <Chip>Concept · self-initiated</Chip>}
-                      </span>
-                      <span className="mt-2 block max-w-[64ch] text-[14.5px] leading-relaxed text-[var(--ink-2)]">
-                        {w.summary}
-                      </span>
-                    </span>
-                    <span
-                      aria-hidden
-                      className="col-start-2 text-[14px] font-semibold text-[var(--accent)] transition-transform duration-300 group-hover:translate-x-1 md:col-start-3"
-                    >
-                      Read →
-                    </span>
-                  </Link>
+                  <WorkRow item={w} index={i} isConcept={w.isConcept} />
                 </Reveal>
               ))}
             </ol>
@@ -139,8 +122,12 @@ export default function HomePage() {
         </div>
       </Section>
 
-      {/* ── Service pillars (bento with real variation) ───────────────────── */}
-      <Section tone="surface">
+      {/* ── Service pillars (bento with real variation) ─────────────────────
+             Recessed band rather than paper: DESIGN.md rejects "white cards on
+             white", and the white cards here are `--surface` by contract — they
+             read correctly on the canvas bands they sit on elsewhere. The fault
+             was the ground, not the card. */}
+      <Section className="bg-[var(--canvas-2)]">
         <div className="container-studio">
           <SectionHeading
             eyebrow={<Eyebrow>Services</Eyebrow>}
@@ -154,33 +141,40 @@ export default function HomePage() {
               const span = i < 3 ? "lg:col-span-2" : "lg:col-span-3";
               return (
                 <Reveal key={s.slug} delay={i * 60} className={span}>
-                  <Link href={`/services/${s.slug}`} className="surface-link flex h-full flex-col p-6">
-                    <span className="meta">0{i + 1}</span>
-                    <span className="display-h3 mt-3">{s.title}</span>
-                    <span className="mt-2 block text-[14px] leading-relaxed text-[var(--ink-2)]">{s.shortDescription}</span>
-                    <span className="mt-5 flex flex-wrap gap-x-4 gap-y-1.5">
-                      {s.outcomePoints.map((o) => (
-                        <span key={o} className="flex items-start gap-1.5 text-[13px] text-[var(--ink-2)]">
-                          <Tick />
-                          {o}
-                        </span>
-                      ))}
-                    </span>
-                    <span className="mt-auto pt-6 text-[13.5px] font-semibold text-[var(--accent)]">Details →</span>
-                  </Link>
+                  <SpotlightSurface>
+                    <Link href={`/services/${s.slug}`} className="flex h-full flex-col">
+                      <span className="meta">0{i + 1}</span>
+                      <span className="display-h3 mt-3">{s.title}</span>
+                      <span className="mt-2 block text-[14px] leading-relaxed text-[var(--ink-2)]">{s.shortDescription}</span>
+                      <span className="mt-5 flex flex-wrap gap-x-4 gap-y-1.5">
+                        {s.outcomePoints.map((o) => (
+                          <span key={o} className="flex items-start gap-1.5 text-[13px] text-[var(--ink-2)]">
+                            <Tick />
+                            {o}
+                          </span>
+                        ))}
+                      </span>
+                      <span className="mt-auto pt-6 text-[13.5px] font-semibold text-[var(--accent)]">Details →</span>
+                    </Link>
+                  </SpotlightSurface>
                 </Reveal>
               );
             })}
-            <Reveal delay={300} className="lg:col-span-3">
+            {/* Full width so the bento rows actually close: 3 + 2 + a half-row
+                left a 560x211 dead quadrant on desktop. At `sm` it backfills
+                the slot the fifth card would otherwise leave empty. */}
+            <Reveal delay={300} className="lg:col-span-6">
               <Link
                 href="/start-project"
-                className="group flex h-full flex-col justify-between gap-6 rounded-[16px] border border-[var(--ink)] bg-[var(--ink)] p-6 text-white"
+                className="group flex h-full flex-col gap-6 rounded-[16px] border border-[var(--ink)] bg-[var(--ink)] p-6 text-white lg:flex-row lg:items-center lg:justify-between lg:gap-10 md:p-8"
               >
-                <span className="meta !text-white/60">Unsure?</span>
-                <span className="display-h3 text-[19px] text-white">
-                  Not sure which fits? Describe the outcome — we&apos;ll route it.
+                <span className="block">
+                  <span className="meta !text-white/60">Unsure?</span>
+                  <span className="display-h3 mt-2 block text-[19px] text-white">
+                    Not sure which fits? Describe the outcome — we&apos;ll route it.
+                  </span>
                 </span>
-                <span className="btn-onink w-fit">{siteConfig.primaryCta}</span>
+                <span className="btn-onink w-fit shrink-0">{siteConfig.primaryCta}</span>
               </Link>
             </Reveal>
           </div>
@@ -196,20 +190,9 @@ export default function HomePage() {
             lead="A short, written process. Every step produces something you can read — nothing runs on vibes."
             action={<ButtonLink href="/process" variant="secondary">How we work</ButtonLink>}
           />
-          <ol className="mt-10 grid gap-px overflow-hidden rounded-[16px] border border-[var(--line)] bg-[var(--line)] md:grid-cols-5">
-            {steps.map(([t, d], i) => (
-              <Reveal
-                as="li"
-                key={t}
-                delay={i * 60}
-                className="group bg-[var(--surface)] p-6 transition-colors duration-300 hover:bg-[var(--surface-2)]"
-              >
-                <span className="meta text-[var(--accent)]">{String(i + 1).padStart(2, "0")}</span>
-                <span className="display-h3 mt-3 block">{t}</span>
-                <span className="mt-2 block text-[13.5px] leading-relaxed text-[var(--ink-2)]">{d}</span>
-              </Reveal>
-            ))}
-          </ol>
+          <div className="mt-12">
+            <ProcessRail steps={steps} />
+          </div>
         </div>
       </Section>
 
@@ -253,23 +236,34 @@ export default function HomePage() {
         </div>
       </Section>
 
-      {/* ── Why this works (hairline columns, no cards) ──────────────────── */}
-      <Section>
+      {/* ── Why this works — deliberately NOT the bordered cell grid the
+             process section used to be: borderless triptych, watermark
+             numerals, and a ground tone no other band uses ─────────────── */}
+      <Section className="bg-[var(--canvas-2)]">
         <div className="container-studio">
           <SectionHeading title="Why this process works" className="max-w-[40ch]" />
-          <div className="mt-10 grid gap-px overflow-hidden rounded-[16px] border border-[var(--line)] bg-[var(--line)] md:grid-cols-3">
+          <ol className="mt-14 grid gap-12 md:grid-cols-3 md:gap-10">
             {[
               ["Written scope", "Deliverables and exclusions agreed before build — fewer surprises."],
               ["Feasibility-checked timelines", "Dates follow dependency and capacity checks, not optimism."],
               ["Direct communication", "You talk to the people doing the work, not a ticket queue."],
             ].map(([t, d], i) => (
-              <Reveal key={t} delay={i * 70} className="bg-[var(--surface)] p-8">
-                <p className="display-h2 text-[28px] text-[var(--accent)]/25">{String(i + 1).padStart(2, "0")}</p>
-                <p className="display-h3 mt-4">{t}</p>
-                <p className="mt-2 text-[14px] leading-relaxed text-[var(--ink-2)]">{d}</p>
+              <Reveal as="li" key={t} delay={i * 70} className="group relative border-t border-[var(--line-2)] pt-7">
+                <span
+                  aria-hidden
+                  className="absolute -top-px left-0 h-[2px] w-10 bg-[var(--accent)] transition-[width] duration-500 group-hover:w-full"
+                />
+                <p
+                  aria-hidden
+                  className="display-h2 text-[52px] leading-none text-[var(--line-2)] transition-colors duration-500 group-hover:text-[var(--accent)]"
+                >
+                  {String(i + 1).padStart(2, "0")}
+                </p>
+                <h3 className="display-h3 mt-4 text-[21px]">{t}</h3>
+                <p className="mt-3 text-[14.5px] leading-relaxed text-[var(--ink-2)]">{d}</p>
               </Reveal>
             ))}
-          </div>
+          </ol>
         </div>
       </Section>
 

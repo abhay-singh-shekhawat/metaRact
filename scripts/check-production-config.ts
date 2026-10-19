@@ -1,12 +1,29 @@
 /**
- * Production preflight: fails when required public fields remain placeholders
+ * Production preflight: fails when a required public field is still a placeholder
  * or when server secrets needed for production are missing.
  * Run: pnpm check:production-config
  */
-const requiredPublic: Array<[string, string[]]> = [
-  ["NEXT_PUBLIC_STUDIO_NAME", ["", "Your Studio Name"]],
-  ["NEXT_PUBLIC_SITE_URL", [""]],
-];
+import { siteConfig } from "../src/config/site";
+
+let failed = false;
+
+// The studio name is a configured fact now (the supplied policies in docs/legal/ name
+// the business), so this gate is no longer "set the env var" but "never deploy a
+// placeholder" — it fails if the name resolves to one, however it got there. The
+// resolution rule lives in src/config/site.ts so the app and this check cannot drift.
+if (siteConfig.isPlaceholderName) {
+  console.error("MISSING/PLACEHOLDER: NEXT_PUBLIC_STUDIO_NAME");
+  failed = true;
+}
+
+const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || "").trim();
+if (!siteUrl) {
+  console.error("MISSING/PLACEHOLDER: NEXT_PUBLIC_SITE_URL");
+  failed = true;
+} else if (!siteUrl.startsWith("https://")) {
+  console.error("NEXT_PUBLIC_SITE_URL must be a canonical https origin in production.");
+  failed = true;
+}
 
 const requiredServer = [
   "MONGODB_URI",
@@ -20,29 +37,18 @@ const requiredServer = [
   "UPSTASH_REDIS_REST_TOKEN",
 ];
 
-let failed = false;
-for (const [key, bad] of requiredPublic) {
-  const v = (process.env[key] || "").trim();
-  if (bad.includes(v)) {
-    console.error(`MISSING/PLACEHOLDER: ${key}`);
-    failed = true;
-  }
-}
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "";
-if (siteUrl && !siteUrl.startsWith("https://")) {
-  console.error("NEXT_PUBLIC_SITE_URL must be a canonical https origin in production.");
-  failed = true;
-}
 for (const key of requiredServer) {
   if (!process.env[key]) {
     console.error(`MISSING: ${key}`);
     failed = true;
   }
 }
+
 if (process.env.ADMIN_BOOTSTRAP_ALLOWED === "true") {
   console.error("ADMIN_BOOTSTRAP_ALLOWED must be false for normal production runtime.");
   failed = true;
 }
+
 if (failed) {
   console.error("\nProduction preflight FAILED.");
   process.exit(1);

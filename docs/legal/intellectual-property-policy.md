@@ -1,0 +1,59 @@
+# Intellectual Property Policy
+
+
+## 1. Purpose and scope
+
+This policy explains how intellectual property is handled when **Metaract** ("Agency", "we", "us" or "our") provides website development, custom software, application development, UI/UX design and prototyping, graphic design, and AI/LLM services.
+
+Metaract decides intellectual-property ownership and licensing **case by case for each project**. The accepted quote, statement of work (SOW), licence, or signed IP assignment must identify the deliverables and the ownership or usage rights being granted before work begins. If a signed project agreement clearly differs from this general policy, the project agreement controls for that project, subject to applicable law.
+
+## 2. Client materials remain yours
+
+You retain ownership of materials you provide, such as your brand assets, logos, copy, photographs, datasets, business information, product requirements, software and other content ("Client Materials"). You grant us a limited, non-exclusive permission to access, copy, adapt and use Client Materials only as reasonably necessary to scope, perform, test and deliver the agreed project, and to meet legal or security obligations.
+
+You confirm that you have the rights and permissions necessary for us to use the Client Materials for the project. You must tell us about restrictions, licences, privacy limitations or confidentiality obligations that apply to those materials.
+
+## 3. Agency tools, know-how and reusable materials
+
+We retain ownership of intellectual property that we owned or developed independently of your project, including our general know-how, methods, workflows, templates, reusable code, libraries, components, tools, frameworks, utilities and non-client-specific improvements ("Agency Background Materials"). We may use general skills and experience gained while working on a project, provided we do not disclose your confidential information or reuse materials in breach of your rights.
+
+If Agency Background Materials are incorporated into a deliverable, the project agreement should identify them where material. Once you have paid the relevant fees, we grant you the licence specified in the SOW that is reasonably necessary to use the deliverable for its agreed purpose. Unless the SOW says otherwise, the licence does not permit you to extract and resell our reusable tools as a standalone product.
+
+## 4. Custom deliverables and ownership transfer
+
+For each project, we should agree in writing which final deliverables are being assigned to you and which are being licensed. **Payment alone does not automatically transfer every right in every project component.** Source files, editable design files, deployment scripts, raw datasets, training artefacts, model weights, adapters, prompts, internal tools and working files are included only if the quote or SOW says they are included.
+
+Where the SOW states that a specific bespoke deliverable is assigned to you, the assignment will take effect after full payment of the amounts due for that deliverable and completion of any other stated transfer conditions. The written and signed IP assignment or IP schedule should identify the work, the rights assigned, the duration, the territorial extent, and the consideration for the assignment, in accordance with applicable law. For clarity, the parties should use a signed project agreement or assignment schedule rather than relying on this general website policy alone.
+
+If the project agreement does not clearly state the ownership or licence terms, those terms must be clarified and agreed in writing before delivery or use; neither party should assume that an assignment or a particular licence has been granted. The quote/SOW should specify the permitted purpose, territory, duration, exclusivity, sublicensing/redistribution rights, and whether source or editable files are included. If your project needs full ownership, exclusive rights, source code, editable files or unrestricted redistribution, tell us before accepting the quote so those rights can be documented and priced accurately.
+
+## 5. Third-party and open-source components
+
+A deliverable may incorporate third-party software, open-source components, fonts, stock images, plugins, APIs, datasets, model services or other licensed materials. Those items remain subject to their own licences and terms; we cannot assign rights that we do not own. Where material, we will identify relevant dependencies or licence restrictions in the SOW or handover notes.
+
+You agree to comply with licence conditions that apply to your use of third-party components. If a project requires proprietary assets or a licence in your name, the quote will state who obtains it, who pays for it, and which account owns it. Removal or replacement of a third-party component may require additional work if it was not included in the original scope.
+
+## 6. AI-assisted work and generated outputs
+
+AI-related projects may involve prompts, datasets, retrieval sources, training configurations, fine-tuning adapters, model outputs or other artefacts. Rights in these materials can depend on the input data, the underlying model, the provider's terms, applicable law and the project agreement. We will not promise that an AI output is legally protectable, unique, free from third-party claims or suitable for every use.
+
+The SOW should specify which AI artefacts are deliverables, what rights can be transferred or licensed, any required third-party terms, and whether you are responsible for human review, compliance checks or deployment controls. We do not use confidential Client Materials for unrelated AI training without express written authorisation.
+
+## 7. Portfolio and publicity
+
+We will not publish your name, logo, screenshots, project details, results or confidential materials as a client case study or testimonial unless you have authorised that use in writing or the project agreement expressly permits it. You can separately approve a limited portfolio display, including any redactions, attribution or launch timing. Permission to display a project does not transfer ownership of your IP to us.
+
+## 8. Third-party infringement claims
+
+If you believe a deliverable or material used in a project infringes your rights or another party's rights, contact us promptly through the agreed project communication channel with the project reference, the material at issue, and relevant supporting information. We will review the concern and discuss reasonable next steps in accordance with the project agreement and applicable law. Do not assume that we can resolve a claim involving Client Materials or third-party services that we do not control.
+
+## 9. Ending a project and unpaid work
+
+Until the agreed payment and transfer conditions have been met, rights in unpaid deliverables remain as specified in the project agreement and applicable law. If a project is cancelled, rights in completed, paid-for deliverables, unfinished work, source files and Agency Background Materials will be handled under the project agreement, the Cancellation and Refund Policy, and any signed IP assignment or licence. We do not grant a right to use unpaid work merely because a draft or preview has been shared for review.
+
+## 10. Questions and requests
+
+For questions about ownership, licences, source files, portfolio permissions or intellectual-property claims, contact us through the agreed project communication channel and include the project reference.
+
+**Metaract**  
+Metaract operates online. For IP questions, contact us through the agreed project communication channel.

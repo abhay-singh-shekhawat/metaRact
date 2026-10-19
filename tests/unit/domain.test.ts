@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import {
   isValidTransition,
   allowedTransitions,
@@ -37,9 +37,22 @@ describe("fingerprint", () => {
 });
 
 describe("production preflight", () => {
-  it("detects placeholder config", () => {
+  it("detects missing config", () => {
     const r = isProductionConfigComplete();
     expect(r.ok).toBe(false);
-    expect(r.missing).toContain("NEXT_PUBLIC_STUDIO_NAME");
+    // The studio name is a published fact now (docs/legal/, src/config/site.ts), so it
+    // is no longer a required *deployment* field — but a placeholder must still fail.
+    expect(r.missing).not.toContain("NEXT_PUBLIC_STUDIO_NAME");
+    expect(r.missing).toContain("NEXT_PUBLIC_SITE_URL (must be https)");
+  });
+
+  it("still fails closed when a placeholder name is configured", async () => {
+    process.env.NEXT_PUBLIC_STUDIO_NAME = "Your Studio Name";
+    vi.resetModules();
+    const mod = await import("@/config/site");
+    expect(mod.siteConfig.isPlaceholderName).toBe(true);
+    expect(mod.isProductionConfigValid().missing).toContain("NEXT_PUBLIC_STUDIO_NAME");
+    delete process.env.NEXT_PUBLIC_STUDIO_NAME;
+    vi.resetModules();
   });
 });

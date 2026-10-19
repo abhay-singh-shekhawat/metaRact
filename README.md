@@ -12,9 +12,10 @@ Gmail SMTP via Nodemailer (log-only fallback in dev), Cloudflare Turnstile
 (fail-closed in production, bypass in dev), Upstash Redis rate limiting
 (in-memory fallback in dev).
 
-> No invented business facts: studio name/contact default to placeholders,
-> portfolio shows only approved entries (one labelled concept), policies are
-> marked drafts pending legal review.
+> No invented business facts: the portfolio shows only approved entries (one
+> labelled concept), and the four policy pages publish the operator's supplied
+> documents verbatim (`docs/legal/`). Contact details default to empty until
+> supplied.
 
 ## Prerequisites
 
@@ -94,8 +95,9 @@ delete their rows in `admin_sessions` (or wait for the 12h TTL expiry).
   verified `EMAIL_FROM`, monitored `INTERNAL_NOTIFICATION_EMAIL`,
   Turnstile keys, Upstash Redis, canonical `NEXT_PUBLIC_SITE_URL` (https).
 - `ADMIN_BOOTSTRAP_ALLOWED=false` in production runtime.
-- Approve brand name, contact email, services, portfolio entries, and all four
-  policy pages; bootstrap founder accounts; complete backup test-restore.
+- Approve contact email, services, and portfolio entries; bootstrap founder
+  accounts; complete backup test-restore. (Studio name and all four policy pages
+  are now supplied and published — see `docs/legal/`.)
 - Run `pnpm check:production-config` — it must pass before launch.
 
 ## Known limitations

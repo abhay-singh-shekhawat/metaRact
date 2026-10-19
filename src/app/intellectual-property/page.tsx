@@ -1,16 +1,18 @@
-import { PolicyShell, policyLayout } from "@/components/marketing/PolicyShell";
+import type { Metadata } from "next";
+import { LegalPage } from "@/components/marketing/LegalPage";
+import { siteConfig } from "@/config/site";
+import { intellectualPropertyPolicyDoc } from "@/content/legal/intellectual-property-policy";
 
-export const metadata = policyLayout("IP & Portfolio Terms", "Who owns deliverables and when the studio may show work publicly.");
+export const metadata: Metadata = {
+  title: intellectualPropertyPolicyDoc.title,
+  description: `Who owns what on a ${siteConfig.studioName} project: client materials, our reusable tools, custom deliverables, third-party components, AI outputs, and portfolio permission.`,
+};
 
-export default function IpPage() {
+export default function IntellectualPropertyPolicyPage() {
   return (
-    <PolicyShell title="IP & portfolio terms" lead="Ownership transfers as the written quote says. Public portfolio display always needs explicit permission.">
-      <h2 className="font-semibold text-[#151923]">Deliverable ownership</h2>
-      <p>Each quote states whether the client receives exclusive rights, editable source files, or final exports only. Until the quote says otherwise, assume final exports — not source — are the deliverable.</p>
-      <h2 className="font-semibold text-[#151923]">Portfolio display</h2>
-      <p>We publish client work only with explicit permission covering what may be shown (name, screenshots, description, dates). Concept work is always labelled as concept and never presented as client work.</p>
-      <h2 className="font-semibold text-[#151923]">Third-party assets</h2>
-      <p>Stock, fonts, and licensed media remain under their own licences. The quote states who pays for them and what usage is covered.</p>
-    </PolicyShell>
+    <LegalPage
+      doc={intellectualPropertyPolicyDoc}
+      lead="Who owns what: your materials, our reusable tools, custom deliverables, third-party and open-source components, AI outputs, and portfolio display."
+    />
   );
 }

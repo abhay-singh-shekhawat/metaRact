@@ -1,5 +1,26 @@
+import { legalConfig } from "./legal";
+
+/**
+ * The name the business is published under. Real since 2026-10-18: the supplied
+ * policy documents name it, so it is a configured fact rather than a placeholder
+ * awaiting one (docs/legal/). `NEXT_PUBLIC_STUDIO_NAME` can still override it.
+ */
+const DEFAULT_STUDIO_NAME = "Metaract";
+
+/** Values that mean "nobody has supplied a real name", and must fail the preflight. */
+export const PLACEHOLDER_STUDIO_NAMES = ["", "Your Studio Name"];
+
+/**
+ * The studio's published inbox, supplied 2026-10-19. A default (not an
+ * env-only value) so the contact page never falls back to "will appear here
+ * once approved" in production; `NEXT_PUBLIC_CONTACT_EMAIL` still wins.
+ */
+const DEFAULT_CONTACT_EMAIL = "metaract3x@gmail.com";
+
+const studioName = (process.env.NEXT_PUBLIC_STUDIO_NAME ?? DEFAULT_STUDIO_NAME).trim();
+
 export const siteConfig = {
-  studioName: process.env.NEXT_PUBLIC_STUDIO_NAME || "Your Studio Name",
+  studioName,
   siteUrl: (process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000").replace(/\/$/, ""),
   tagline: "A small studio for websites, software, design, and applied AI.",
   heroTitle: "Have an idea? Let's scope it properly.",
@@ -7,11 +28,11 @@ export const siteConfig = {
     "We design and build websites, custom software, prototypes, brand assets, and practical AI integrations — scoped in writing, quoted by a human, and handed over cleanly.",
   primaryCta: "Describe your project",
   secondaryCta: "Explore Our Work",
-  contactEmail: process.env.NEXT_PUBLIC_CONTACT_EMAIL || "",
+  contactEmail: (process.env.NEXT_PUBLIC_CONTACT_EMAIL || DEFAULT_CONTACT_EMAIL).trim(),
   whatsappUrl: process.env.NEXT_PUBLIC_WHATSAPP_URL || "",
-  privacyNoticeVersion: process.env.PRIVACY_NOTICE_VERSION || "2026-10-01",
+  privacyNoticeVersion: legalConfig.version,
   responseNote: "We review every request by hand and reply from the contact details you share.",
-  isPlaceholderName: !process.env.NEXT_PUBLIC_STUDIO_NAME || process.env.NEXT_PUBLIC_STUDIO_NAME === "Your Studio Name",
+  isPlaceholderName: PLACEHOLDER_STUDIO_NAMES.includes(studioName),
 };
 
 export function isProductionConfigValid(): { ok: boolean; missing: string[] } {

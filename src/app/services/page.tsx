@@ -5,6 +5,7 @@ import { siteConfig } from "@/config/site";
 import { ButtonLink, Eyebrow, PageHero, Panel, Tick } from "@/components/ui/primitives";
 import { Reveal } from "@/components/motion/Reveal";
 import { Tilt } from "@/components/motion/Tilt";
+import { SpotlightSurface } from "@/components/marketing/SpotlightSurface";
 
 export const metadata: Metadata = {
   title: "Services",
@@ -44,33 +45,35 @@ export default function ServicesPage() {
               return (
                 <Reveal key={s.slug} delay={Math.min(i, 3) * 70} className={wide ? "sm:col-span-2" : ""}>
                   <Tilt className="h-full">
-                    <Link href={`/services/${s.slug}`} className="surface-link flex h-full flex-col p-7 md:p-9">
-                      <div className={`flex flex-col gap-6 ${wide ? "lg:flex-row lg:items-start lg:gap-12" : ""}`}>
-                        <div className={wide ? "lg:w-[42%] lg:shrink-0" : ""}>
-                          <span className="meta">0{i + 1}</span>
-                          <h2 className="display-h3 mt-3 text-[20px] md:text-[22px]">{s.title}</h2>
-                          {wide ? (
-                            <span className="mt-4 hidden text-[13.5px] font-semibold text-[var(--accent)] lg:block">
+                    <SpotlightSurface padding="p-7 md:p-9">
+                      <Link href={`/services/${s.slug}`} className="flex h-full flex-col">
+                        <div className={`flex flex-col gap-6 ${wide ? "lg:flex-row lg:items-start lg:gap-12" : ""}`}>
+                          <div className={wide ? "lg:w-[42%] lg:shrink-0" : ""}>
+                            <span className="meta">0{i + 1}</span>
+                            <h2 className="display-h3 mt-3 text-[20px] md:text-[22px]">{s.title}</h2>
+                            {wide ? (
+                              <span className="mt-4 hidden text-[13.5px] font-semibold text-[var(--accent)] lg:block">
+                                Details →
+                              </span>
+                            ) : null}
+                          </div>
+                          <div className="flex-1">
+                            <p className="max-w-[62ch] text-[14.5px] leading-relaxed text-[var(--ink-2)]">{s.longDescription}</p>
+                            <ul className="mt-5 flex flex-wrap gap-x-6 gap-y-2">
+                              {s.outcomePoints.map((o) => (
+                                <li key={o} className="flex items-start gap-2 text-[13.5px] text-[var(--ink-2)]">
+                                  <Tick />
+                                  {o}
+                                </li>
+                              ))}
+                            </ul>
+                            <span className={`mt-6 inline-block text-[13.5px] font-semibold text-[var(--accent)] ${wide ? "lg:hidden" : ""}`}>
                               Details →
                             </span>
-                          ) : null}
+                          </div>
                         </div>
-                        <div className="flex-1">
-                          <p className="max-w-[62ch] text-[14.5px] leading-relaxed text-[var(--ink-2)]">{s.longDescription}</p>
-                          <ul className="mt-5 flex flex-wrap gap-x-6 gap-y-2">
-                            {s.outcomePoints.map((o) => (
-                              <li key={o} className="flex items-start gap-2 text-[13.5px] text-[var(--ink-2)]">
-                                <Tick />
-                                {o}
-                              </li>
-                            ))}
-                          </ul>
-                          <span className={`mt-6 inline-block text-[13.5px] font-semibold text-[var(--accent)] ${wide ? "lg:hidden" : ""}`}>
-                            Details →
-                          </span>
-                        </div>
-                      </div>
-                    </Link>
+                      </Link>
+                    </SpotlightSurface>
                   </Tilt>
                 </Reveal>
               );
