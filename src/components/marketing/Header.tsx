@@ -3,16 +3,32 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import GradualBlur from "@/components/GradualBlur";
 import { primaryNav } from "@/config/navigation";
 import { siteConfig } from "@/config/site";
 
 export function Header() {
   const [open, setOpen] = useState(false);
   const [condensed, setCondensed] = useState(false);
+  // The progressive blur under the bar changes with scroll position, so it is
+  // mounted only when motion is welcome — the same rule Tilt, Magnetic,
+  // DraftingLamp and HeroStage follow. GradualBlur ships no reduced-motion
+  // handling of its own, and leaving the blur permanently on would soft-focus
+  // the top of every page instead of only what slides under the bar.
+  const [scrollBlur, setScrollBlur] = useState(false);
   const pathname = usePathname();
+  const isAdmin = pathname.startsWith("/admin");
   const sentinelRef = useRef<HTMLSpanElement>(null);
   const sheetRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    const motion = window.matchMedia("(prefers-reduced-motion: no-preference)");
+    const sync = () => setScrollBlur(motion.matches);
+    sync();
+    motion.addEventListener?.("change", sync);
+    return () => motion.removeEventListener?.("change", sync);
+  }, []);
 
   // Condense the bar once the page has scrolled past it — observed, not
   // scrolled-listened (DESIGN.md §6).
@@ -132,6 +148,24 @@ export function Header() {
         </div>
       </header>
 
+      {/* Progressive blur along the bar's lower edge: content softens as it
+          slides under instead of meeting a hard line. Anchored to the bar's own
+          height so the two edges move together when it condenses. */}
+      {scrollBlur && !isAdmin && (
+        <GradualBlur
+          position="top"
+          target="page"
+          height="6rem"
+          strength={1.4}
+          layers={6}
+          autoHide
+          zIndex={20}
+          // The bar is 72px of content plus its 1px bottom border, so the blur
+          // starts on the border's outer edge and the two never overlap.
+          style={{ top: condensed ? 61 : 73, transition: "top 300ms cubic-bezier(0.16, 1, 0.3, 1)" }}
+        />
+      )}
+
       {open && (
         <div className="fixed inset-0 z-30 lg:hidden">
           <button
@@ -147,6 +181,7 @@ export function Header() {
             role="dialog"
             aria-modal="true"
             aria-label="Menu"
+            data-lenis-prevent
             className="absolute inset-x-0 top-0 max-h-[100dvh] overflow-y-auto overscroll-contain border-b border-[var(--line)] bg-[var(--surface)] pt-[84px] pb-8 shadow-[0_40px_60px_-40px_rgba(11,15,23,0.6)]"
           >
             <nav aria-label="Mobile" className="container-studio">

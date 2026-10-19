@@ -1,8 +1,11 @@
 import type { Metadata } from "next";
 import { Bricolage_Grotesque, Geist } from "next/font/google";
+// Lenis's own stylesheet, imported ahead of globals so ours wins where they differ.
+import "lenis/dist/lenis.css";
 import "../styles/globals.css";
 import { Header } from "@/components/marketing/Header";
 import { Footer } from "@/components/marketing/Footer";
+import { SmoothScroll } from "@/components/motion/SmoothScroll";
 import { siteConfig } from "@/config/site";
 
 // Typography is part of the design contract (DESIGN.md §4.2): Bricolage Grotesque
@@ -48,11 +51,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         >
           Skip to content
         </a>
-        <Header />
-        <main id="main" className="min-h-[60vh] scroll-mt-[72px]">
-          {children}
-        </main>
-        <Footer />
+        <SmoothScroll>
+          <Header />
+          <main id="main" className="min-h-[60vh] scroll-mt-[72px]">
+            {children}
+          </main>
+          <Footer />
+        </SmoothScroll>
       </body>
     </html>
   );

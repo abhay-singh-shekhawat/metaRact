@@ -10,6 +10,13 @@ const DEFAULT_STUDIO_NAME = "Metaract";
 /** Values that mean "nobody has supplied a real name", and must fail the preflight. */
 export const PLACEHOLDER_STUDIO_NAMES = ["", "Your Studio Name"];
 
+/**
+ * The studio's published inbox, supplied 2026-10-19. A default (not an
+ * env-only value) so the contact page never falls back to "will appear here
+ * once approved" in production; `NEXT_PUBLIC_CONTACT_EMAIL` still wins.
+ */
+const DEFAULT_CONTACT_EMAIL = "metaract3x@gmail.com";
+
 const studioName = (process.env.NEXT_PUBLIC_STUDIO_NAME ?? DEFAULT_STUDIO_NAME).trim();
 
 export const siteConfig = {
@@ -21,7 +28,7 @@ export const siteConfig = {
     "We design and build websites, custom software, prototypes, brand assets, and practical AI integrations — scoped in writing, quoted by a human, and handed over cleanly.",
   primaryCta: "Describe your project",
   secondaryCta: "Explore Our Work",
-  contactEmail: process.env.NEXT_PUBLIC_CONTACT_EMAIL || "",
+  contactEmail: (process.env.NEXT_PUBLIC_CONTACT_EMAIL || DEFAULT_CONTACT_EMAIL).trim(),
   whatsappUrl: process.env.NEXT_PUBLIC_WHATSAPP_URL || "",
   privacyNoticeVersion: legalConfig.version,
   responseNote: "We review every request by hand and reply from the contact details you share.",

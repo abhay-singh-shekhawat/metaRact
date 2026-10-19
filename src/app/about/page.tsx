@@ -1,9 +1,15 @@
 import type { Metadata } from "next";
-import { Eyebrow, PageHero, Section } from "@/components/ui/primitives";
+import { Eyebrow, PageHero, Section, SectionHeading } from "@/components/ui/primitives";
 import { Reveal } from "@/components/motion/Reveal";
+import { FounderCard } from "@/components/marketing/FounderCard";
+import { founders } from "@/config/team";
 import { siteConfig } from "@/config/site";
 
-export const metadata: Metadata = { title: "About", description: "A small three-founder digital-services studio. Details appear once approved." };
+export const metadata: Metadata = {
+  title: "About",
+  description:
+    "A small three-founder digital-services studio: websites, custom software, product design, brand assets, and practical AI integrations.",
+};
 
 export default function AboutPage() {
   return (
@@ -18,36 +24,39 @@ export default function AboutPage() {
           { k: "Capacity", v: "A few scoped projects at a time" },
           { k: "Agreements", v: "Written scope, then a human quote" },
           { k: "Handover", v: "Clean, as the quote states" },
-          { k: "Bios", v: "Published once approved" },
+          { k: "Profiles", v: "LinkedIn and GitHub" },
         ]}
       />
 
-      {/* ── One statement, and a lot of quiet around it ───────────────────── */}
-      <Section tone="plain">
+      {/* ── The three people, as themselves ───────────────────────────────── */}
+      <Section tone="paper">
         <div className="container-studio">
           <Reveal>
-            <p className="display-h2 max-w-[30ch] text-[1.75rem] leading-[1.15] text-balance md:max-w-[34ch] md:text-[2.3rem]">
-              We are a three-person team. You talk to the people doing the work.
-            </p>
+            <SectionHeading
+              eyebrow={<Eyebrow>Founders</Eyebrow>}
+              title="Three founders. Direct contact."
+              lead="These profiles are our own. When you write, one of us answers."
+            />
+          </Reveal>
+
+          <Reveal delay={80}>
+            <ul className="founder-stage mt-12 grid gap-x-10 gap-y-10 lg:grid-cols-3">
+              {founders.map((founder, i) => (
+                <FounderCard key={founder.name} founder={founder} index={i + 1} />
+              ))}
+            </ul>
           </Reveal>
         </div>
       </Section>
 
-      {/* ── Two hairline-divided columns; nothing else on the page ─────────── */}
+      {/* ── How the studio works, stated once, as the closing idea ────────── */}
       <Section tone="surface">
-        <div className="container-studio grid md:grid-cols-2">
-          <Reveal className="border-t border-[var(--line)] py-8 md:pr-12">
-            <h2 className="display-h3 text-[19px]">How we work</h2>
-            <p className="mt-3 max-w-[46ch] text-[15px] leading-relaxed text-[var(--ink-2)]">
-              We take on a small number of scoped projects at a time, confirm everything in writing, and
-              hand over cleanly.
-            </p>
-          </Reveal>
-          <Reveal delay={80} className="border-t border-[var(--line)] py-8 md:border-l md:pl-12">
-            <h2 className="display-h3 text-[19px]">Founders</h2>
-            <p className="mt-3 max-w-[46ch] text-[15px] leading-relaxed text-[var(--ink-2)]">
-              Founder names, roles, and profiles will appear here once approved for publication. We
-              don&apos;t invent team bios.
+        <div className="container-studio">
+          <Reveal>
+            <p className="meta">How we work</p>
+            <p className="display-h2 mt-4 max-w-[36ch] text-[1.6rem] leading-[1.2] text-balance md:text-[2.05rem]">
+              We take on a small number of scoped projects at a time, confirm everything in writing,
+              and hand over cleanly.
             </p>
           </Reveal>
         </div>

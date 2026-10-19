@@ -18,6 +18,16 @@ const VIEWPORTS = [
   { name: "mobile", width: 390, height: 844 },
 ];
 
+/**
+ * One test walks 26 routes, and on a cold `next dev` the per-route compile is
+ * the dominant cost (~1.1 s each, before first-visit compilation). The global
+ * 60 s budget is right for every other spec but cannot cover 26 cold routes:
+ * it produced a timeout inside `settle()` with no assertion having failed.
+ * 180 s keeps the sweep's real guarantees — status below 500, no horizontal
+ * overflow, no console errors — while giving compilation room to finish.
+ */
+test.describe.configure({ timeout: 180_000 });
+
 const findings: Array<Record<string, unknown>> = [];
 
 for (const vp of VIEWPORTS) {

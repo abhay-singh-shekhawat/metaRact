@@ -141,7 +141,7 @@ export function LegalPage({ doc, lead }: { doc: LegalDoc; lead: string }) {
         <div className="container-studio">
           <div className="lg:grid lg:grid-cols-[248px_minmax(0,1fr)] lg:gap-16">
             <aside className="legal-toc hidden lg:block">
-              <nav aria-label="On this page" className="sticky top-24 max-h-[calc(100dvh-8rem)] overflow-y-auto pb-6">
+              <nav aria-label="On this page" data-lenis-prevent className="sticky top-24 max-h-[calc(100dvh-8rem)] overflow-y-auto pb-6">
                 <p className="meta border-b border-[var(--line)] pb-3">On this page</p>
                 <SectionList sections={doc.sections} className="mt-4" />
               </nav>

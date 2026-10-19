@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { enabledServices } from "@/config/services";
+import { StudioWordmark } from "@/components/marketing/StudioWordmark";
 import { footerLegal, primaryNav } from "@/config/navigation";
 import { siteConfig } from "@/config/site";
 
@@ -70,6 +71,12 @@ export function Footer() {
               </ul>
             </nav>
           </div>
+        </div>
+
+        {/* The studio signature, drawn rather than set (see
+            THIRD-PARTY-NOTICES.md). */}
+        <div className="mt-14">
+          <StudioWordmark />
         </div>
       </div>
 
