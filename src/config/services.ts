@@ -50,7 +50,7 @@ export const services: ServiceDef[] = [
     ],
     seoTitle: "Websites & Digital Experiences — Business sites that convert",
     seoDescription: "Responsive business websites, landing pages, and redesigns with clear scope and human-reviewed quotes.",
-    relatedWorkSlugs: [],
+    relatedWorkSlugs: ["git-jaipur-codefiesta-5"],
     outcomePoints: ["Explain the offer in seconds", "Collect enquiries reliably", "Stay fast on phones and desktops"],
   },
   {

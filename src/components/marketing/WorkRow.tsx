@@ -8,9 +8,10 @@ import { CompositionPlate } from "@/components/marketing/CompositionPlate";
  *
  * The left column carries the item's own generated plate — an inline SVG drawn
  * from the item's metadata (see plateArt.ts), never a fake screenshot — plus
- * its index, provenance chip, and stack. The right column carries the title,
- * summary, and outcomes. Shared by the home teaser and the /work index so the
- * two treatments cannot drift apart.
+ * its index, provenance chip, and stack. The right column carries the title
+ * (which opens the live project directly when one is recorded), summary, and
+ * outcomes. Shared by the home teaser and the /work index so the two treatments
+ * cannot drift apart.
  *
  * Only real `WorkItem` fields are rendered. Nothing here is invented.
  * ------------------------------------------------------------------------- */
@@ -24,13 +25,13 @@ export function WorkRow({
   index: number;
   isConcept: boolean;
 }) {
+  const caseStudyHref = `/work/${item.slug}`;
   return (
-    <Link
-      href={`/work/${item.slug}`}
-      className="group grid gap-x-8 gap-y-5 py-8 transition-colors hover:bg-[var(--surface-2)] md:grid-cols-[200px_1fr]"
-    >
+    <div className="group grid gap-x-8 gap-y-5 py-8 transition-colors hover:bg-[var(--surface-2)] md:grid-cols-[200px_1fr]">
       <div>
-        <CompositionPlate item={item} index={index} variant="compact" />
+        <Link href={caseStudyHref} className="block" aria-label={`Read the ${item.title} case study`}>
+          <CompositionPlate item={item} index={index} variant="compact" />
+        </Link>
         <div className="mt-4 flex items-center gap-3">
           <span className="meta">{String(index + 1).padStart(2, "0")}</span>
           {isConcept ? (
@@ -50,7 +51,23 @@ export function WorkRow({
       </div>
 
       <div>
-        <h3 className="display-h3 text-[19px] transition-colors group-hover:text-[var(--accent)]">{item.title}</h3>
+        <h3 className="display-h3 text-[19px]">
+          {item.liveUrl ? (
+            <a
+              href={item.liveUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="transition-colors hover:text-[var(--accent)]"
+            >
+              {item.title}
+              <span className="sr-only"> (opens in a new tab)</span>
+            </a>
+          ) : (
+            <Link href={caseStudyHref} className="transition-colors hover:text-[var(--accent)]">
+              {item.title}
+            </Link>
+          )}
+        </h3>
         <p className="mt-2 max-w-[68ch] text-[14.5px] leading-relaxed text-[var(--ink-2)]">{item.summary}</p>
         {item.outcome.length > 0 && (
           <ul className="mt-5 grid gap-2 sm:grid-cols-2">
@@ -62,13 +79,16 @@ export function WorkRow({
             ))}
           </ul>
         )}
-        <span className="mt-5 inline-flex items-center gap-2 text-[13.5px] font-semibold text-[var(--accent)]">
+        <Link
+          href={caseStudyHref}
+          className="mt-5 inline-flex items-center gap-2 text-[13.5px] font-semibold text-[var(--accent)]"
+        >
           Read case study
           <span aria-hidden className="transition-transform duration-300 group-hover:translate-x-1">
             →
           </span>
-        </span>
+        </Link>
       </div>
-    </Link>
+    </div>
   );
 }

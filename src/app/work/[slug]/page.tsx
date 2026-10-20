@@ -35,7 +35,14 @@ export default async function WorkDetail({ params }: { params: Promise<{ slug: s
         ]}
         cta={
           <>
-            <ButtonLink href="/start-project">Start a similar project</ButtonLink>
+            {w.liveUrl && (
+              <ButtonLink href={w.liveUrl} target="_blank" rel="noreferrer">
+                Visit live site ↗
+              </ButtonLink>
+            )}
+            <ButtonLink href="/start-project" variant={w.liveUrl ? "secondary" : "primary"}>
+              Start a similar project
+            </ButtonLink>
             <ButtonLink href="/work" variant="secondary">
               All work
             </ButtonLink>

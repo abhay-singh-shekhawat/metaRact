@@ -194,11 +194,15 @@ export function ButtonLink({
   children,
   variant = "primary",
   className = "",
+  target,
+  rel,
 }: {
   href: string;
   children: ReactNode;
   variant?: "primary" | "secondary" | "accent" | "onInk";
   className?: string;
+  target?: string;
+  rel?: string;
 }) {
   const styles = {
     primary: "btn-primary",
@@ -207,7 +211,7 @@ export function ButtonLink({
     onInk: "btn-onink",
   } as const;
   return (
-    <Link href={href} className={`${styles[variant]} ${className}`}>
+    <Link href={href} className={`${styles[variant]} ${className}`} target={target} rel={rel}>
       {children}
     </Link>
   );

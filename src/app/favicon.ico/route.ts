@@ -1,10 +1,8 @@
-const SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="#151923"/><text x="32" y="43" font-family="system-ui, -apple-system, sans-serif" font-size="32" font-weight="700" fill="#ffffff" text-anchor="middle">Y</text></svg>`;
-
-export function GET() {
-  return new Response(SVG, {
-    headers: {
-      "Content-Type": "image/svg+xml",
-      "Cache-Control": "public, max-age=86400",
-    },
-  });
+/**
+ * The real icon is the agency mark, generated from the logo at src/app/icon.png.
+ * Browsers and tools still request /favicon.ico directly, so point them at the
+ * same file rather than serving a separate placeholder.
+ */
+export function GET(request: Request) {
+  return Response.redirect(new URL("/icon.png", request.url), 308);
 }

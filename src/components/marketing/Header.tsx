@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import GradualBlur from "@/components/GradualBlur";
@@ -82,12 +83,14 @@ export function Header() {
           }`}
         >
           <Link href="/" className="group flex shrink-0 items-center gap-2.5" aria-label={`${siteConfig.studioName} home`}>
-            <span
-              aria-hidden
-              className="grid h-8 w-8 place-items-center rounded-[9px] bg-[var(--ink)] text-[14px] font-semibold text-white transition-transform duration-300 group-hover:rotate-[-6deg]"
-            >
-              {siteConfig.studioName.charAt(0).toUpperCase()}
-            </span>
+            <Image
+              src="/agency-logo.png"
+              alt=""
+              width={965}
+              height={1060}
+              priority
+              className="h-8 w-auto transition-transform duration-300 group-hover:rotate-[-6deg] sm:h-9"
+            />
             <span className="hidden font-display text-[15.5px] font-semibold tracking-[-0.02em] sm:block">
               {siteConfig.studioName}
             </span>

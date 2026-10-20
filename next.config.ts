@@ -10,6 +10,8 @@ const scriptSrc = isDev
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+  // Hide the Next.js dev-tools indicator (the floating "N" button).
+  devIndicators: false,
   allowedDevOrigins: ["127.0.0.1", "localhost"],
   async headers() {
     return [
