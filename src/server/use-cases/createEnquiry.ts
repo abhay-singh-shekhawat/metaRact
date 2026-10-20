@@ -220,7 +220,9 @@ export async function createEnquiryUseCase(input: CreateInput) {
     createdAt: now,
   });
   const teamRecipient =
-    process.env.INTERNAL_NOTIFICATION_EMAIL || "team@example.com";
+    process.env.AGENCY_NOTIFICATION_EMAIL ||
+    process.env.INTERNAL_NOTIFICATION_EMAIL ||
+    "team@example.com";
   const emailMode = getEmailMode();
   console.log(`[enquiry] saving service=${normalized.serviceSlug} team_to=${teamRecipient} customer_to=${normalized.emailNormalized} email_mode=${emailMode}`);
   store.outbox.push({
@@ -321,7 +323,9 @@ async function createEnquiryMongoFlow(
     completeOutboxJobMongo,
   } = await import("@/server/mongo-store");
   const teamRecipient =
-    process.env.INTERNAL_NOTIFICATION_EMAIL || "team@example.com";
+    process.env.AGENCY_NOTIFICATION_EMAIL ||
+    process.env.INTERNAL_NOTIFICATION_EMAIL ||
+    "team@example.com";
   const created = await createEnquiryMongo(normalized, fingerprint, teamRecipient);
   if (!created.ok) {
     return {

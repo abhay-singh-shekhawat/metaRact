@@ -49,9 +49,7 @@ export function teamAlertHtml(
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export function isGmailConfigured(): boolean {
-  return Boolean(
-    process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD && process.env.EMAIL_FROM
-  );
+  return Boolean(process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD && fromAddress());
 }
 
 /** Which adapter sendEmail() will use. "log-only" means NO real email leaves the server. */
@@ -60,24 +58,44 @@ export function getEmailMode(): "smtp" | "log-only" {
 }
 
 function fromAddress(): string | null {
-  const raw = (process.env.EMAIL_FROM || "").trim().replace(/^["']|["']$/g, "").trim();
+  const raw = (process.env.AGENCY_EMAIL || process.env.EMAIL_FROM || "")
+    .trim()
+    .replace(/^["']|["']$/g, "")
+    .trim();
   if (!raw) return null;
   const m = raw.match(/<([^<>@\s]+@[^<>@\s]+\.[^<>@\s]+)>\s*$/);
   return m ? m[1] : raw;
 }
 
+/**
+ * The From header, optionally decorated with the agency display name.
+ * Falls back to the bare address when AGENCY_EMAIL_NAME is unset, so existing
+ * EMAIL_FROM-only setups keep their exact previous header.
+ */
+function fromHeader(): string {
+  const addr = fromAddress();
+  if (!addr) return "";
+  const name = (process.env.AGENCY_EMAIL_NAME || "").trim();
+  if (!name) return addr;
+  // Strip characters that would break the header or allow injection.
+  const safeName = name.replace(/["\\\r\n]/g, "").trim();
+  return safeName ? `"${safeName}" <${addr}>` : addr;
+}
+
 function configError(): string | null {
   if (!process.env.GMAIL_USER) return "GMAIL_USER is not configured.";
   if (!process.env.GMAIL_APP_PASSWORD) return "GMAIL_APP_PASSWORD is not configured.";
-  if (!process.env.EMAIL_FROM) return "EMAIL_FROM is not configured.";
   const addr = fromAddress();
-  if (!addr || !EMAIL_RE.test(addr)) return "EMAIL_FROM is not a valid email address.";
+  if (!addr || !EMAIL_RE.test(addr))
+    return "AGENCY_EMAIL (or EMAIL_FROM) is not configured or not a valid email address.";
   return null;
 }
 
 type Transport = {
   sendMail: (opts: {
     from: string;
+    replyTo?: string;
+    bcc?: string;
     to: string;
     subject: string;
     html: string;
@@ -151,7 +169,9 @@ export async function sendEmail(opts: {
   try {
     const transport = await getTransport();
     const info = await transport.sendMail({
-      from: process.env.EMAIL_FROM!,
+      from: fromHeader(),
+      replyTo: process.env.AGENCY_REPLY_TO || undefined,
+      bcc: process.env.AGENCY_BCC_EMAIL || undefined,
       to: opts.to,
       subject: opts.subject,
       html: opts.html,

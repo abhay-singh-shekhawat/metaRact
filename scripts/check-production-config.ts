@@ -30,8 +30,6 @@ const requiredServer = [
   "MONGODB_DB_NAME",
   "GMAIL_USER",
   "GMAIL_APP_PASSWORD",
-  "EMAIL_FROM",
-  "INTERNAL_NOTIFICATION_EMAIL",
   "TURNSTILE_SECRET_KEY",
   "UPSTASH_REDIS_REST_URL",
   "UPSTASH_REDIS_REST_TOKEN",
@@ -42,6 +40,22 @@ for (const key of requiredServer) {
     console.error(`MISSING: ${key}`);
     failed = true;
   }
+}
+
+// Agency email: the outbound identity and the inbox that receives notifications
+// (back-compat EMAIL_FROM / INTERNAL_NOTIFICATION_EMAIL are still honored).
+if (!process.env.AGENCY_EMAIL && !process.env.EMAIL_FROM) {
+  console.error("MISSING: AGENCY_EMAIL (or EMAIL_FROM)");
+  failed = true;
+}
+if (
+  !process.env.AGENCY_NOTIFICATION_EMAIL &&
+  !process.env.INTERNAL_NOTIFICATION_EMAIL
+) {
+  console.error(
+    "MISSING: AGENCY_NOTIFICATION_EMAIL (or INTERNAL_NOTIFICATION_EMAIL)"
+  );
+  failed = true;
 }
 
 if (process.env.ADMIN_BOOTSTRAP_ALLOWED === "true") {

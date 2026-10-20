@@ -28,7 +28,11 @@ export const siteConfig = {
     "We design and build websites, custom software, prototypes, brand assets, and practical AI integrations — scoped in writing, quoted by a human, and handed over cleanly.",
   primaryCta: "Describe your project",
   secondaryCta: "Explore Our Work",
-  contactEmail: (process.env.NEXT_PUBLIC_CONTACT_EMAIL || DEFAULT_CONTACT_EMAIL).trim(),
+  contactEmail: (
+    process.env.NEXT_PUBLIC_CONTACT_EMAIL ||
+    process.env.AGENCY_EMAIL ||
+    DEFAULT_CONTACT_EMAIL
+  ).trim(),
   whatsappUrl: process.env.NEXT_PUBLIC_WHATSAPP_URL || "",
   privacyNoticeVersion: legalConfig.version,
   responseNote: "We review every request by hand and reply from the contact details you share.",
@@ -43,8 +47,10 @@ export function isProductionConfigValid(): { ok: boolean; missing: string[] } {
   if (!process.env.MONGODB_DB_NAME) missing.push("MONGODB_DB_NAME");
   if (!process.env.GMAIL_USER) missing.push("GMAIL_USER");
   if (!process.env.GMAIL_APP_PASSWORD) missing.push("GMAIL_APP_PASSWORD");
-  if (!process.env.EMAIL_FROM) missing.push("EMAIL_FROM");
-  if (!process.env.INTERNAL_NOTIFICATION_EMAIL) missing.push("INTERNAL_NOTIFICATION_EMAIL");
+  if (!process.env.AGENCY_EMAIL && !process.env.EMAIL_FROM)
+    missing.push("AGENCY_EMAIL (or EMAIL_FROM)");
+  if (!process.env.AGENCY_NOTIFICATION_EMAIL && !process.env.INTERNAL_NOTIFICATION_EMAIL)
+    missing.push("AGENCY_NOTIFICATION_EMAIL (or INTERNAL_NOTIFICATION_EMAIL)");
   if (!process.env.TURNSTILE_SECRET_KEY) missing.push("TURNSTILE_SECRET_KEY");
   if (!process.env.UPSTASH_REDIS_REST_URL) missing.push("UPSTASH_REDIS_REST_URL");
   if (!process.env.UPSTASH_REDIS_REST_TOKEN) missing.push("UPSTASH_REDIS_REST_TOKEN");
