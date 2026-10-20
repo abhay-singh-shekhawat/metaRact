@@ -1,6 +1,7 @@
 import { promises as fs } from "fs";
 import path from "path";
 import { generateReference } from "@/lib/security/fingerprint";
+import { isWorkersRuntime } from "@/lib/runtime";
 import type { EnquiryStatus } from "@/server/policies/statusMachine";
 
 export interface EnquiryRecord {
@@ -82,11 +83,27 @@ interface StoreShape {
 const DATA_DIR = path.join(process.cwd(), ".data");
 const DATA_FILE = path.join(DATA_DIR, "studio.json");
 
+/**
+ * The file-backed store is a local-development fallback only. On Cloudflare
+ * Workers there is no persistent filesystem, so enquiries written here would
+ * silently vanish between requests. Fail loudly instead (and let the enquiry
+ * route report `storage_failed`) so a missing `MONGODB_URI` in production is
+ * obvious rather than a slow data leak.
+ */
+function assertFileStoreAvailable(): void {
+  if (isWorkersRuntime()) {
+    throw new Error(
+      "The file-backed store is unavailable on Cloudflare Workers. Set MONGODB_URI so enquiries are stored in MongoDB Atlas."
+    );
+  }
+}
+
 function emptyStore(): StoreShape {
   return { seq: 0, enquiries: [], events: [], notes: [], outbox: [] };
 }
 
 export async function readStore(): Promise<StoreShape> {
+  assertFileStoreAvailable();
   try {
     const raw = await fs.readFile(DATA_FILE, "utf-8");
     const parsed = JSON.parse(raw) as StoreShape;
@@ -104,6 +121,7 @@ export async function readStore(): Promise<StoreShape> {
 }
 
 export async function writeStore(store: StoreShape): Promise<void> {
+  assertFileStoreAvailable();
   await fs.mkdir(DATA_DIR, { recursive: true });
   const tmp = `${DATA_FILE}.${process.pid}.tmp`;
   await fs.writeFile(tmp, JSON.stringify(store, null, 2), "utf-8");

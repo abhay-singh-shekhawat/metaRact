@@ -108,23 +108,29 @@ declare global {
   var __gmailTransport: Transport | undefined;
 }
 
-async function getTransport(): Promise<Transport> {
-  if (!globalThis.__gmailTransport) {
-    const nodemailer = await import("nodemailer");
-    globalThis.__gmailTransport = nodemailer.createTransport({
-      host: "smtp.gmail.com",
-      port: 465,
-      secure: true,
-      auth: {
-        user: process.env.GMAIL_USER,
-        pass: process.env.GMAIL_APP_PASSWORD,
-      },
-      connectionTimeout: 10000,
-      greetingTimeout: 10000,
-      socketTimeout: 15000,
-    }) as unknown as Transport;
-  }
-  return globalThis.__gmailTransport!;
+/**
+ * SMTP transports own a live socket, and a Worker request may not perform I/O
+ * on a socket created by an earlier request. A module-level singleton would
+ * therefore work for the first send and fail on the next one, so each send gets
+ * its own transport and closes it afterwards.
+ *
+ * (Gmail SMTP over `node:net`/`node:tls` requires `nodejs_compat`, which this
+ * Worker enables. Delivery is not exercised by the local preview tests.)
+ */
+async function createTransport(): Promise<Transport> {
+  const nodemailer = await import("nodemailer");
+  return nodemailer.createTransport({
+    host: "smtp.gmail.com",
+    port: 465,
+    secure: true,
+    auth: {
+      user: process.env.GMAIL_USER,
+      pass: process.env.GMAIL_APP_PASSWORD,
+    },
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 15000,
+  }) as unknown as Transport;
 }
 
 /** Test hook: replace the SMTP transport with a stub. Never used in production. */
@@ -166,8 +172,9 @@ export async function sendEmail(opts: {
     console.error(`[email][smtp] invalid recipient type=${opts.type} to=${opts.to}`);
     return { ok: false, errorCode: "invalid_recipient", mode: "smtp", detail: "Recipient address failed validation." };
   }
+  const injected = globalThis.__gmailTransport;
+  const transport = injected ?? (await createTransport());
   try {
-    const transport = await getTransport();
     const info = await transport.sendMail({
       from: fromHeader(),
       replyTo: process.env.AGENCY_REPLY_TO || undefined,
@@ -188,5 +195,10 @@ export async function sendEmail(opts: {
     const detail = String((err as { message?: unknown })?.message ?? err).slice(0, 200);
     console.error(`[email][smtp] FAILED type=${opts.type} to=${opts.to} errorCode=${code} detail=${detail}`);
     return { ok: false, errorCode: code, mode: "smtp", detail };
+  } finally {
+    // Injected transports belong to the caller (tests); only close our own.
+    if (!injected) {
+      (transport as Transport & { close?: () => void }).close?.();
+    }
   }
 }

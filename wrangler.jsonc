@@ -1,0 +1,36 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  // Entry point and assets are produced by `opennextjs-cloudflare build`.
+  "name": "digital-services-studio",
+  "main": ".open-next/worker.js",
+  // Set to the date this file was written. Node.js built-in APIs (including
+  // node:net / node:tls, which the MongoDB driver needs) are enabled from
+  // compatibility date 2025-03-20 onward; from 2026-08-04 onward the runtime
+  // enables nodejs_compat by default and the flag below is simply ignored.
+  "compatibility_date": "2026-10-20",
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS",
+  },
+  // No Durable Objects, R2, or self-reference bindings: the app has no ISR,
+  // no on-demand revalidation, and no "use cache" entries, so OpenNext's
+  // default no-op cache is sufficient. next/image is configured as
+  // `unoptimized` in next.config.ts, so no Cloudflare Images binding is needed.
+  //
+  // Next.js 15.5 ships a pages/ directory inside the server build even for an
+  // app-router-only project, so Next's request pipeline calls
+  // getMiddlewareManifest() for every request. That method is a dynamic
+  // require() of middleware-manifest.json, which workerd cannot resolve and
+  // which makes every route return 500. Minimal mode makes it return null
+  // instead. Middleware itself still runs: OpenNext invokes the separately
+  // bundled middleware handler before the Next server (see .open-next/worker.js).
+  "vars": {
+    "NEXT_PRIVATE_MINIMAL_MODE": "1",
+  },
+  "upload_source_maps": true,
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1,
+  },
+}

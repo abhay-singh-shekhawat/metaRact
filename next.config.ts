@@ -10,9 +10,17 @@ const scriptSrc = isDev
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+  // All images are local files under public/ and are already small (the largest
+  // is ~160 KB). Cloudflare Workers has no next/image optimizer of its own; its
+  // Images binding is a separate, billed product. Serving the originals keeps
+  // deployment working on any Workers plan without changing the markup.
+  images: {
+    unoptimized: true,
+  },
   // Hide the Next.js dev-tools indicator (the floating "N" button).
   devIndicators: false,
   allowedDevOrigins: ["127.0.0.1", "localhost"],
+
   async headers() {
     return [
       {

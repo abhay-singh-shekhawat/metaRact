@@ -37,7 +37,9 @@ Local admin sign-in: `/admin/sign-in` with `ADMIN_DEV_EMAIL` + `ADMIN_DEV_PASSWO
 
 ## MongoDB Atlas setup
 
-1. Create a cluster and database user, allow-list your deployment IPs.
+1. Create a cluster and database user. For Cloudflare Workers, configure Atlas
+   network access as described in `CLOUDFLARE_DEPLOYMENT.md` (Workers have no
+   fixed egress IP).
 2. Set `MONGODB_URI` (full connection string) and `MONGODB_DB_NAME` in
    `.env.local` / hosting secrets. Collections and indexes are created
    automatically on first use (`ensureIndexes`).
@@ -89,6 +91,9 @@ delete their rows in `admin_sessions` (or wait for the 12h TTL expiry).
 
 ## Deployment & launch blockers
 
+- Cloudflare Workers: follow `CLOUDFLARE_DEPLOYMENT.md` for the OpenNext build,
+  build-time vs runtime environment split, Atlas networking, Workers Builds,
+  verification, and rollback.
 - Point `MONGODB_URI` at a dedicated production cluster; verify collections
   and indexes; enable provider backups.
 - Configure Gmail App Password (`GMAIL_USER`, `GMAIL_APP_PASSWORD`),
@@ -102,9 +107,10 @@ delete their rows in `admin_sessions` (or wait for the 12h TTL expiry).
 
 ## Known limitations
 
-- Local dev uses the file store when `MONGODB_URI` is absent; the MongoDB
-  paths require a live Atlas cluster to verify end-to-end (documented as
-  unverified without credentials).
+- Local dev uses the file store when `MONGODB_URI` is absent. The MongoDB paths
+  were verified against a local replica set in the Workers runtime; connecting
+  to Atlas from Cloudflare's edge remains a post-deploy check (see
+  `CLOUDFLARE_DEPLOYMENT.md`).
 - Email without Gmail credentials uses the log-only adapter (marked sent,
   logged server-side) so the enquiry flow stays testable.
 - `ADMIN_DEV_*` fallback auth is development-only; production enforces

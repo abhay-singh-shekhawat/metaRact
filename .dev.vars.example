@@ -1,0 +1,55 @@
+# Cloudflare Worker environment for LOCAL preview only (`pnpm preview`).
+#
+# Copy this file to `.dev.vars` (git-ignored) and replace the placeholders:
+#   cp .dev.vars.example .dev.vars
+#
+# This file holds placeholders only. Real secrets belong in the Cloudflare
+# dashboard for deployed Workers (Worker -> Settings -> Variables and Secrets).
+#
+# IMPORTANT: NEXT_PUBLIC_* values are NOT read from this file. Next.js inlines
+# them during `next build`, so set them in `.env.local` or the shell before
+# running `pnpm preview`:
+#   NEXT_PUBLIC_SITE_URL=http://localhost:3000
+#   NEXT_PUBLIC_TURNSTILE_SITE_KEY=<Cloudflare Turnstile test site key>
+#   NEXT_PUBLIC_STUDIO_NAME=Metaract
+#   NEXT_PUBLIC_CONTACT_EMAIL=team@example.com
+#   NEXT_PUBLIC_WHATSAPP_URL=
+#
+# NEXTJS_ENV selects which compiled Next.js env file the Worker loads at
+# runtime. `development` matches local work; production defaults to
+# `production` when this is omitted.
+
+NEXTJS_ENV=development
+
+# --- MongoDB -----------------------------------------------------------------
+# Local development needs a replica set for transactions. Atlas works as-is.
+# Without MONGODB_URI the Worker has no persistent store and enquiry submission
+# fails loudly (the file-backed store is disabled on Workers).
+MONGODB_URI=mongodb://127.0.0.1:27017/?replicaSet=rs0
+MONGODB_DB_NAME=digital_services_studio
+
+# --- Anti-abuse --------------------------------------------------------------
+# Cloudflare's test secret always passes; use a real secret in production.
+TURNSTILE_SECRET_KEY=1x0000000000000000000000000000000AA
+
+# Leave blank to use the in-process memory rate limiter (single isolate only).
+UPSTASH_REDIS_REST_URL=
+UPSTASH_REDIS_REST_TOKEN=
+
+# --- Email -------------------------------------------------------------------
+# Leave GMAIL_USER blank to use log-only mode (no real email is sent).
+GMAIL_USER=
+GMAIL_APP_PASSWORD=
+AGENCY_EMAIL=team@example.com
+AGENCY_EMAIL_NAME=Metaract Studio
+AGENCY_REPLY_TO=team@example.com
+AGENCY_NOTIFICATION_EMAIL=team@example.com
+AGENCY_BCC_EMAIL=
+
+# --- Admin -------------------------------------------------------------------
+# Used only by the local signed-cookie fallback; never enable dev auth in
+# production. ADMIN_DEV_* is ignored when MONGODB_URI is configured.
+ADMIN_SESSION_SECRET=local-dev-only-change-me
+ALLOW_DEV_ADMIN=false
+ADMIN_DEV_EMAIL=
+ADMIN_DEV_PASSWORD=
