@@ -154,8 +154,12 @@ the shell/WSL before `pnpm run deploy`). Changing them requires a rebuild.
 | `NEXT_PUBLIC_CONTACT_EMAIL` | Recommended | No | Public contact address shown on the static contact page. |
 | `NEXT_PUBLIC_WHATSAPP_URL` | No | No | Optional WhatsApp link. |
 
-> `NEXT_PUBLIC_*` values are not read from `.dev.vars` at runtime. They must be
-> present when `next build` runs.
+> `NEXT_PUBLIC_*` values are normally inlined by `next build`, so keep them in
+> the build environment. `NEXT_PUBLIC_TURNSTILE_SITE_KEY` is also read again per
+> request on `/start-project`, so the same value can be supplied as a Worker
+> runtime variable (or `.dev.vars` in local preview) to change it without a
+> rebuild — but set the build variable too: `pnpm check:production-config` fails
+> when it is missing, and the build-time value is the fallback.
 
 ### Runtime (Worker variables/secrets)
 
@@ -168,6 +172,7 @@ build-time copies.
 | `MONGODB_URI` | **Yes** | **Yes** | Atlas connection string. If absent, the Worker has no persistent store and enquiry submission fails loudly. |
 | `MONGODB_DB_NAME` | No | No | Defaults to `digital_services_studio`. |
 | `TURNSTILE_SECRET_KEY` | **Yes** in production | **Yes** | Server-side Turnstile verification; fails closed in production. |
+| `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | Optional fallback | No | Same public site key as the build variable. `/start-project` reads it per request, so setting it here lets you rotate the key without a rebuild; the build value remains the fallback. |
 | `UPSTASH_REDIS_REST_URL` | Recommended | No | Rate-limit backend URL. |
 | `UPSTASH_REDIS_REST_TOKEN` | Recommended | **Yes** | Rate-limit backend token. If absent, the per-isolate memory limiter is used (not reliable across isolates). |
 | `GMAIL_USER` | Recommended | No | Gmail mailbox used for SMTP. Blank ⇒ log-only mode (no real email; submissions are still stored). |

@@ -25,6 +25,14 @@ if (!siteUrl) {
   failed = true;
 }
 
+// The widget cannot load or render without this public key. Keep it in the
+// build environment (Workers Builds build variable) so the canonical value is
+// available to every build; /start-project also has a request-time fallback.
+if (!process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY) {
+  console.error("MISSING: NEXT_PUBLIC_TURNSTILE_SITE_KEY");
+  failed = true;
+}
+
 const requiredServer = [
   "MONGODB_URI",
   "MONGODB_DB_NAME",

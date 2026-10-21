@@ -2,12 +2,18 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 import Link from "next/link";
 import { Card, Eyebrow, PageHero, Tick } from "@/components/ui/primitives";
+import { getTurnstileSiteKey } from "@/lib/public-env";
 import { EnquiryFormClient } from "./form-client";
 
 export const metadata: Metadata = {
   title: "Start a Project",
   description: "Describe your project in plain language. A human reviews every brief and replies with a reference number.",
 };
+
+// Render per request so the public Turnstile key can come from the Worker's
+// runtime environment as well as the production build. Without this the page can
+// be statically cached with an empty key and the widget never mounts.
+export const dynamic = "force-dynamic";
 
 const nextSteps: [string, string][] = [
   ["Reference number", "Shown immediately on success — quote it in any follow-up."],
@@ -23,6 +29,8 @@ const goodToKnow = [
 ];
 
 export default function StartProjectPage() {
+  const turnstileSiteKey = getTurnstileSiteKey();
+
   return (
     <>
       <PageHero
@@ -52,7 +60,7 @@ export default function StartProjectPage() {
                 </div>
               }
             >
-              <EnquiryFormClient />
+              <EnquiryFormClient turnstileSiteKey={turnstileSiteKey} />
             </Suspense>
           </div>
 

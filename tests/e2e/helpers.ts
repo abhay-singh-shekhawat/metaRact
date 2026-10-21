@@ -74,6 +74,7 @@ export async function stubTurnstile(page: Page): Promise<void> {
       status: 200,
       contentType: "application/javascript",
       body: `window.turnstile = {
+  ready: function (callback) { setTimeout(callback, 0); },
   render: function (el, opts) {
     if (opts && typeof opts.callback === "function") {
       setTimeout(function () { opts.callback(${JSON.stringify(E2E_TURNSTILE_TOKEN)}); }, 0);

@@ -5,6 +5,7 @@ import { enabledServices } from "@/config/services";
 import { siteConfig } from "@/config/site";
 import { ReadinessStrip } from "./ReadinessStrip";
 import { INITIAL_READINESS, readReadiness, sameReadiness, type Readiness } from "./readiness";
+import { TurnstileWidget } from "./TurnstileWidget";
 
 interface FieldErrors {
   [k: string]: string;
@@ -36,54 +37,20 @@ function newIdempotencyKey(): string {
   });
 }
 
-declare global {
-  interface Window {
-    turnstile?: {
-      render: (
-        el: HTMLElement,
-        opts: {
-          sitekey: string;
-          callback?: (token: string) => void;
-          "expired-callback"?: () => void;
-          "error-callback"?: () => void;
-        }
-      ) => string;
-      reset: (widgetId?: string) => void;
-      remove: (widgetId?: string) => void;
-    };
-  }
-}
-
-/** Load Cloudflare Turnstile once; resolves when window.turnstile is ready. */
-function loadTurnstileScript(): Promise<void> {
-  if (typeof window === "undefined") return Promise.resolve();
-  if (window.turnstile) return Promise.resolve();
-  const existing = document.querySelector<HTMLScriptElement>("script[data-turnstile]");
-  if (existing) {
-    return new Promise((resolve) => {
-      existing.addEventListener("load", () => resolve(), { once: true });
-      // If it already loaded, resolve on next tick.
-      setTimeout(() => resolve(), 0);
-    });
-  }
-  return new Promise((resolve, reject) => {
-    const s = document.createElement("script");
-    s.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
-    s.async = true;
-    s.defer = true;
-    s.setAttribute("data-turnstile", "");
-    s.onload = () => resolve();
-    s.onerror = () => reject(new Error("turnstile_load_failed"));
-    document.head.appendChild(s);
-  });
-}
-
 const inputCls = "field-input mt-1.5";
 const labelCls = "field-label";
 const helpCls = "mt-1.5 text-[13px] leading-relaxed text-[var(--ink-3)]";
 const errCls = "mt-1.5 text-[13.5px] font-medium text-[var(--danger)]";
 
-export function EnquiryForm({ preselected }: { preselected?: string }) {
+type TurnstileStatus = "idle" | "loading" | "ready" | "expired" | "error";
+
+export function EnquiryForm({
+  preselected,
+  turnstileSiteKey = "",
+}: {
+  preselected?: string;
+  turnstileSiteKey?: string;
+}) {
   const services = enabledServices();
   const [serviceSlug, setServiceSlug] = useState(
     services.some((s) => s.slug === preselected) ? preselected! : services[0]?.slug ?? ""
@@ -112,58 +79,18 @@ export function EnquiryForm({ preselected }: { preselected?: string }) {
   const isGraph = serviceSlug === "graphic-brand-design";
   const isAi = serviceSlug === "ai-automation";
 
-  const turnstileSiteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || "";
+  // The server component resolves this from the runtime Worker environment so a
+  // missing build-time NEXT_PUBLIC_* value does not silently remove the widget.
+  // The fallback keeps direct/client-only usage working.
+  const siteKey = (turnstileSiteKey || process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || "").trim();
   const [turnstileToken, setTurnstileToken] = useState("");
-  const [turnstileFailed, setTurnstileFailed] = useState(false);
-  const turnstileBoxRef = useRef<HTMLDivElement>(null);
-  const turnstileWidgetId = useRef<string | null>(null);
-
-  // Render the Turnstile widget explicitly and capture its token.
-  // Without this, the form submits an empty token and the server 403s.
-  useEffect(() => {
-    if (!turnstileSiteKey) return;
-    let cancelled = false;
-    loadTurnstileScript()
-      .then(() => {
-        if (cancelled || !turnstileBoxRef.current || !window.turnstile) return;
-        if (turnstileWidgetId.current) return;
-        try {
-          turnstileWidgetId.current = window.turnstile.render(turnstileBoxRef.current, {
-            sitekey: turnstileSiteKey,
-            callback: (t: string) => {
-              setTurnstileToken(t);
-              setTurnstileFailed(false);
-            },
-            "expired-callback": () => setTurnstileToken(""),
-            "error-callback": () => {
-              setTurnstileToken("");
-              setTurnstileFailed(true);
-            },
-          });
-        } catch {
-          setTurnstileFailed(true);
-        }
-      })
-      .catch(() => setTurnstileFailed(true));
-    return () => {
-      cancelled = true;
-      try {
-        if (turnstileWidgetId.current && window.turnstile) window.turnstile.remove(turnstileWidgetId.current);
-      } catch {
-        /* noop */
-      }
-      turnstileWidgetId.current = null;
-    };
-  }, [turnstileSiteKey]);
+  const [turnstileStatus, setTurnstileStatus] = useState<TurnstileStatus>(siteKey ? "loading" : "idle");
+  const [turnstileResetKey, setTurnstileResetKey] = useState(0);
 
   function resetTurnstile() {
     setTurnstileToken("");
-    setTurnstileFailed(false);
-    try {
-      if (turnstileWidgetId.current && window.turnstile) window.turnstile.reset(turnstileWidgetId.current);
-    } catch {
-      /* noop */
-    }
+    setTurnstileStatus(siteKey ? "loading" : "idle");
+    setTurnstileResetKey((key) => key + 1);
   }
 
   function retryTurnstile() {
@@ -607,27 +534,61 @@ export function EnquiryForm({ preselected }: { preselected?: string }) {
         {err("privacyNoticeAcknowledged") && <p className={errCls}>{err("privacyNoticeAcknowledged")}</p>}
       </div>
 
-      {turnstileSiteKey ? (
-        <div>
-          <div ref={turnstileBoxRef} />
-          <input type="hidden" name="turnstileToken" value={turnstileToken} readOnly />
-          {turnstileFailed ? (
-            <div className="mt-2 flex flex-wrap items-center gap-3">
-              <p className={errCls}>
-                The verification check did not finish. A privacy setting, an ad-blocker or a VPN
-                usually causes it — retry, or open this page in another browser.
-              </p>
-              <button type="button" onClick={retryTurnstile} className="btn-secondary !min-h-[40px]">
-                Retry verification
-              </button>
-            </div>
-          ) : (
-            !turnstileToken && <p className={helpCls}>Complete the verification above before submitting.</p>
-          )}
-        </div>
-      ) : (
-        <input type="hidden" name="turnstileToken" value="" />
-      )}
+      <div>
+        {siteKey ? (
+          <>
+            <TurnstileWidget
+              siteKey={siteKey}
+              resetKey={turnstileResetKey}
+              onLoading={() => setTurnstileStatus("loading")}
+              onToken={(token) => {
+                setTurnstileToken(token);
+                setTurnstileStatus("ready");
+              }}
+              onExpired={() => {
+                setTurnstileToken("");
+                setTurnstileStatus("expired");
+              }}
+              onError={() => {
+                setTurnstileToken("");
+                setTurnstileStatus("error");
+              }}
+            />
+            <input type="hidden" name="turnstileToken" value={turnstileToken} readOnly />
+            {turnstileStatus === "error" || turnstileStatus === "expired" ? (
+              <div className="mt-2 flex flex-wrap items-center gap-3">
+                <p className={errCls}>
+                  {turnstileStatus === "expired"
+                    ? "The verification check expired. Please complete it again."
+                    : "The verification check did not finish. A privacy setting, an ad-blocker or a VPN usually causes it — retry, or open this page in another browser."}
+                </p>
+                <button type="button" onClick={retryTurnstile} className="btn-secondary !min-h-[40px]">
+                  Retry verification
+                </button>
+              </div>
+            ) : (
+              !turnstileToken && (
+                <p aria-live="polite" className={helpCls}>
+                  {turnstileStatus === "loading"
+                    ? "Loading verification…"
+                    : "Complete the verification above before submitting."}
+                </p>
+              )
+            )}
+          </>
+        ) : (
+          <>
+            <input type="hidden" name="turnstileToken" value="" />
+            <p role="status" className={errCls}>
+              Verification is unavailable right now. Please retry in a moment, or{" "}
+              <a href="/contact" className="font-semibold underline">
+                contact the studio
+              </a>
+              .
+            </p>
+          </>
+        )}
+      </div>
 
       <button
         type="submit"

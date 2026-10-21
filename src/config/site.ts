@@ -43,6 +43,7 @@ export function isProductionConfigValid(): { ok: boolean; missing: string[] } {
   const missing: string[] = [];
   if (siteConfig.isPlaceholderName) missing.push("NEXT_PUBLIC_STUDIO_NAME");
   if (!process.env.NEXT_PUBLIC_SITE_URL?.startsWith("https://")) missing.push("NEXT_PUBLIC_SITE_URL (must be https)");
+  if (!process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY) missing.push("NEXT_PUBLIC_TURNSTILE_SITE_KEY");
   if (!process.env.MONGODB_URI) missing.push("MONGODB_URI");
   if (!process.env.MONGODB_DB_NAME) missing.push("MONGODB_DB_NAME");
   if (!process.env.GMAIL_USER) missing.push("GMAIL_USER");

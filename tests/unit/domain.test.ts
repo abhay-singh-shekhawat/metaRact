@@ -44,6 +44,7 @@ describe("production preflight", () => {
     // is no longer a required *deployment* field — but a placeholder must still fail.
     expect(r.missing).not.toContain("NEXT_PUBLIC_STUDIO_NAME");
     expect(r.missing).toContain("NEXT_PUBLIC_SITE_URL (must be https)");
+    expect(r.missing).toContain("NEXT_PUBLIC_TURNSTILE_SITE_KEY");
   });
 
   it("still fails closed when a placeholder name is configured", async () => {
