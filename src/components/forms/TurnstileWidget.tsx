@@ -94,8 +94,12 @@ function waitForApi(): Promise<TurnstileApi> {
     if (!existing) {
       script.id = SCRIPT_ID;
       script.src = SCRIPT_SRC;
-      script.async = true;
-      script.defer = true;
+      // Cloudflare's ready() refuses to run when the api.js tag has async/defer
+      // (it cannot guarantee the API loaded before the caller). A dynamically
+      // inserted script still loads asynchronously, but async=false preserves
+      // execution order, so ready() is safe.
+      script.async = false;
+      script.defer = false;
       script.dataset.turnstile = "";
       document.head.appendChild(script);
     } else if (window.turnstile) {
@@ -117,6 +121,20 @@ function loadTurnstileApi(): Promise<TurnstileApi> {
     });
   }
   return scriptPromise;
+}
+
+/**
+ * Cloudflare's ready() throws (error 3857) if api.js was loaded with async or
+ * defer. Our own loader sets both to false, but an older tag left behind by HMR
+ * or another integration may not have. In that case render directly: the script
+ * has already fired `load`, so window.turnstile is present.
+ */
+function canUseTurnstileReady(): boolean {
+  if (typeof document === "undefined") return false;
+  const script = document.querySelector<HTMLScriptElement>(
+    'script[src*="challenges.cloudflare.com/turnstile"]'
+  );
+  return !!script && !script.async && !script.defer;
 }
 
 export interface TurnstileWidgetProps {
@@ -179,9 +197,9 @@ export function TurnstileWidget({
         };
 
         // `ready()` is the supported way to wait for the explicit-rendering API.
-        // The fallback keeps the integration compatible with script stubs/proxies
-        // that expose render/reset/remove but not ready().
-        if (typeof api.ready === "function") api.ready(render);
+        // Skip it for legacy async/defer tags, which make Cloudflare throw 3857;
+        // the fallback keeps that path and script stubs working.
+        if (typeof api.ready === "function" && canUseTurnstileReady()) api.ready(render);
         else render();
       })
       .catch(() => {

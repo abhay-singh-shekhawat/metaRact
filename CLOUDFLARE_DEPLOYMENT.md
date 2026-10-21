@@ -256,6 +256,10 @@ Local notes:
 - Leave `GMAIL_USER` blank for log-only email.
 - Cloudflare's Turnstile test secret
   `1x0000000000000000000000000000000AA` always passes.
+- A production Turnstile site key only renders on hostnames authorized in the
+  Turnstile dashboard. For `localhost`, either use Cloudflare's test site key
+  `1x00000000000000000000AA` or add `localhost` / `127.0.0.1` under Hostname
+  Management. Client error `110200` means the current domain is not authorized.
 - The in-process rate limiter resets when the local Worker restarts.
 
 ---
@@ -342,6 +346,13 @@ In the Cloudflare dashboard:
    These are separate from build variables.
 9. Add a custom domain under **Settings → Domains & Routes**, then rebuild so
    `NEXT_PUBLIC_SITE_URL` matches the final HTTPS origin.
+
+> **Next.js support window:** `@opennextjs/cloudflare` refuses Next.js 15.5.28
+> because the Next.js 15 major is now outside the Next.js team's two-year
+> support window. The Cloudflare build scripts pass
+> `--dangerouslyUseUnsupportedNextVersion` as an interim unblock. Upgrade to
+> Next.js `>=16.4.1` and remove that flag before relying on this version
+> long-term.
 
 Preview deployments: use a separate Worker name (via `wrangler.jsonc` env or a
 dashboard override) and separate Atlas database/user if you want preview data
