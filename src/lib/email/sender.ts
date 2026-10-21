@@ -48,6 +48,17 @@ export function teamAlertHtml(
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+/**
+ * Accept one address or a comma/semicolon-separated list. Keeping this in one
+ * place means the team-alert recipient, retries, and the transport all agree.
+ */
+export function parseRecipients(raw: string): string[] {
+  return raw
+    .split(/[,;]+/)
+    .map((value) => value.trim())
+    .filter(Boolean);
+}
+
 export function isGmailConfigured(): boolean {
   return Boolean(process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD && fromAddress());
 }
@@ -96,7 +107,7 @@ type Transport = {
     from: string;
     replyTo?: string;
     bcc?: string;
-    to: string;
+    to: string | string[];
     subject: string;
     html: string;
     text: string;
@@ -124,8 +135,10 @@ async function createTransport(): Promise<Transport> {
     port: 465,
     secure: true,
     auth: {
-      user: process.env.GMAIL_USER,
-      pass: process.env.GMAIL_APP_PASSWORD,
+      user: process.env.GMAIL_USER?.trim(),
+      // Google displays app passwords in groups of four. Strip any spaces the
+      // operator pasted from the Google UI; SMTP expects the bare 16 chars.
+      pass: process.env.GMAIL_APP_PASSWORD?.replace(/\s+/g, ""),
     },
     connectionTimeout: 10000,
     greetingTimeout: 10000,
@@ -160,6 +173,21 @@ export async function sendEmail(opts: {
 }): Promise<EmailResult> {
   const misconfigured = configError();
   if (misconfigured) {
+    // In development/test, log-only keeps the enquiry flow verifiable without
+    // credentials. In production, silence is dangerous: report a failed
+    // notification so the admin outbox shows the real reason instead of a
+    // misleading "sent" row for an email that never left the server.
+    if (process.env.NODE_ENV === "production") {
+      console.error(
+        `[email][smtp] NOT CONFIGURED (${misconfigured}) type=${opts.type} to=${opts.to}`
+      );
+      return {
+        ok: false,
+        errorCode: "email_not_configured",
+        mode: "smtp",
+        detail: misconfigured,
+      };
+    }
     // Dev/test fallback: log-only adapter, marked sent so the enquiry flow
     // stays verifiable without credentials. Production preflight blocks launch.
     // Loud terminal line so operators never mistake this for a real send.
@@ -168,7 +196,8 @@ export async function sendEmail(opts: {
     );
     return { ok: true, messageId: `log-${Date.now()}`, mode: "log-only", detail: misconfigured };
   }
-  if (!EMAIL_RE.test(opts.to)) {
+  const recipients = parseRecipients(opts.to);
+  if (!recipients.length || recipients.some((address) => !EMAIL_RE.test(address))) {
     console.error(`[email][smtp] invalid recipient type=${opts.type} to=${opts.to}`);
     return { ok: false, errorCode: "invalid_recipient", mode: "smtp", detail: "Recipient address failed validation." };
   }
@@ -179,7 +208,7 @@ export async function sendEmail(opts: {
       from: fromHeader(),
       replyTo: process.env.AGENCY_REPLY_TO || undefined,
       bcc: process.env.AGENCY_BCC_EMAIL || undefined,
-      to: opts.to,
+      to: recipients,
       subject: opts.subject,
       html: opts.html,
       text: htmlToText(opts.html),
@@ -187,13 +216,13 @@ export async function sendEmail(opts: {
     // Accepted by Gmail for submission. Confirmed delivery is not observable
     // here; downstream bounces are handled out of band.
     console.log(
-      `[email][smtp] sent type=${opts.type} to=${opts.to} messageId=${info?.messageId ?? "unknown"}`
+      `[email][smtp] sent type=${opts.type} to=${recipients.join(",")} messageId=${info?.messageId ?? "unknown"}`
     );
     return { ok: true, messageId: info?.messageId, mode: "smtp" };
   } catch (err) {
     const code = classifySmtpError(err);
     const detail = String((err as { message?: unknown })?.message ?? err).slice(0, 200);
-    console.error(`[email][smtp] FAILED type=${opts.type} to=${opts.to} errorCode=${code} detail=${detail}`);
+    console.error(`[email][smtp] FAILED type=${opts.type} to=${recipients.join(",")} errorCode=${code} detail=${detail}`);
     return { ok: false, errorCode: code, mode: "smtp", detail };
   } finally {
     // Injected transports belong to the caller (tests); only close our own.

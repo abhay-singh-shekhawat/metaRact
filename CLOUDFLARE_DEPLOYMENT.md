@@ -175,13 +175,13 @@ build-time copies.
 | `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | Optional fallback | No | Same public site key as the build variable. `/start-project` reads it per request, so setting it here lets you rotate the key without a rebuild; the build value remains the fallback. |
 | `UPSTASH_REDIS_REST_URL` | Recommended | No | Rate-limit backend URL. |
 | `UPSTASH_REDIS_REST_TOKEN` | Recommended | **Yes** | Rate-limit backend token. If absent, the per-isolate memory limiter is used (not reliable across isolates). |
-| `GMAIL_USER` | Recommended | No | Gmail mailbox used for SMTP. Blank ⇒ log-only mode (no real email; submissions are still stored). |
-| `GMAIL_APP_PASSWORD` | Recommended | **Yes** | Google app password (not the account password). |
-| `AGENCY_EMAIL` | **Yes** | No | From address for outgoing email; must match/alias the Gmail account. |
+| `GMAIL_USER` | **Yes** | No | Authenticated Gmail mailbox used for SMTP. Blank means no real email; production reports the notification as failed instead of silently logging it. |
+| `GMAIL_APP_PASSWORD` | **Yes** | **Yes** | Google app password for `GMAIL_USER` (not the account password). Spaces from the Google UI are ignored. |
+| `AGENCY_EMAIL` | **Yes** | No | Visible From address for outgoing email; must match `GMAIL_USER` or a verified Gmail "Send as" alias. Customer confirmations and founder alerts are sent through this account. |
 | `AGENCY_EMAIL_NAME` | No | No | Display name on outgoing email. |
-| `AGENCY_REPLY_TO` | No | No | Reply-To address; defaults to `AGENCY_EMAIL`. |
-| `AGENCY_NOTIFICATION_EMAIL` | **Yes** | No | Internal recipient for new-enquiry notifications. |
-| `AGENCY_BCC_EMAIL` | No | No | Optional BCC. |
+| `AGENCY_REPLY_TO` | No | No | Reply-To address; defaults to `AGENCY_EMAIL`. Customer replies go here. |
+| `AGENCY_NOTIFICATION_EMAIL` | **Yes** | No | Founder/team inbox(es) for new-enquiry alerts. Comma- or semicolon-separate multiple addresses. |
+| `AGENCY_BCC_EMAIL` | No | No | Optional BCC archive of every send. |
 | `ADMIN_SESSION_SECRET` | Recommended | **Yes** | Used by the signed dev-cookie fallback. Generate a long random value; never reuse a dev value in production. |
 | `ALLOW_DEV_ADMIN` | **Yes** | No | Must be `false` (or unset) in production. |
 | `ADMIN_DEV_EMAIL` | No | **Yes** | Dev-only fallback. **Do not set in production.** |
@@ -211,6 +211,41 @@ build-time copies.
 > - Put server-only values in **runtime Variables and Secrets**.
 > - If you must deploy from this machine, temporarily move `.env.local` aside,
 >   build with only public build variables, then restore it.
+
+### Email delivery flow
+
+Two notifications are queued for every new enquiry:
+
+1. **Customer confirmation** — sent to the email address the client typed in
+   the form. This is a receipt with the reference number; it is not a
+   click-to-verify link.
+2. **Founder/team alert** — sent to every address in
+   `AGENCY_NOTIFICATION_EMAIL` (comma- or semicolon-separated), with the
+   reference number, service, project title, and an admin link.
+
+`GMAIL_USER` is the account that actually authenticates to Gmail SMTP.
+`AGENCY_EMAIL` is the address users see in the From field; it must be the same
+mailbox or a verified Gmail “Send as” alias. `AGENCY_REPLY_TO` controls where
+customer replies go. `AGENCY_BCC_EMAIL` is an optional archive copy of every
+send.
+
+Production does **not** read `.env.local`. Set every email value above in the
+Worker's **Variables and Secrets**. The app password must be a Cloudflare
+secret. In development, missing credentials use log-only mode; in production,
+missing credentials are recorded as a failed notification in the admin outbox
+instead of a fake “sent” status.
+
+If submissions are stored but no mail arrives:
+
+- `log-only` in the admin notification row means the Worker is missing
+  `GMAIL_USER`, `GMAIL_APP_PASSWORD`, or `AGENCY_EMAIL`.
+- `auth_failed` usually means the app password is wrong, or `AGENCY_EMAIL` is
+  not a verified alias of `GMAIL_USER`.
+- `transient_failure` / `provider_error` can mean Gmail SMTP could not be
+  reached from the Worker. Check `wrangler tail`; if this persists, replace SMTP
+  with an HTTPS email API.
+- `sent` but nothing in the inbox means check Spam and the Gmail “Sent” folder;
+  the recipient may also have rejected the message downstream.
 
 ---
 
@@ -316,6 +351,10 @@ Then add the non-secret runtime variables in the dashboard:
 `MONGODB_DB_NAME`, `UPSTASH_REDIS_REST_URL`, `GMAIL_USER`, `AGENCY_EMAIL`,
 `AGENCY_EMAIL_NAME`, `AGENCY_REPLY_TO`, `AGENCY_NOTIFICATION_EMAIL`,
 `AGENCY_BCC_EMAIL`, and `ALLOW_DEV_ADMIN=false`.
+
+Set `GMAIL_APP_PASSWORD` as a **secret**, not a plain variable. To notify more
+than one founder, use a comma-separated `AGENCY_NOTIFICATION_EMAIL`, for example
+`founder1@example.com,founder2@example.com`.
 
 Do **not** set `NODE_ENV`, `NEXTJS_ENV`, or `ADMIN_DEV_*` in production.
 
