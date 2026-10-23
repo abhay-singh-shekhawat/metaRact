@@ -57,11 +57,14 @@ export const E2E_SERVER_ENV: Record<string, string> = {
   // "Your Studio Name" placeholder.
   NEXT_PUBLIC_STUDIO_NAME: "Metaract",
   // No real email may leave a test run. getEmailMode() returns "smtp" the
-  // moment GMAIL_USER + GMAIL_APP_PASSWORD + EMAIL_FROM are all set, which they
-  // are in a developer's .env.local — so without these overrides the suite
-  // delivered genuine mail through the operator's Gmail account.
+  // moment GMAIL_USER + GMAIL_APP_PASSWORD + AGENCY_EMAIL are set, and
+  // "resend" when RESEND_API_KEY + AGENCY_EMAIL are — both of which may be in a
+  // developer's .env.local, so without these overrides the suite could send
+  // genuine mail from the operator's real account.
   GMAIL_USER: "",
   GMAIL_APP_PASSWORD: "",
+  RESEND_API_KEY: "",
+  AGENCY_EMAIL: "",
   EMAIL_FROM: "",
   INTERNAL_NOTIFICATION_EMAIL: "e2e-team@example.test",
   // Never bootstrap real admins from a test run.

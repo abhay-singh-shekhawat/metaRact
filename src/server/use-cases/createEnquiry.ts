@@ -9,7 +9,13 @@ import {
 } from "@/lib/security/fingerprint";
 import { readStore, writeStore, nextReference } from "@/server/db";
 import { isMongoConfigured } from "@/lib/mongodb/client";
-import { sendEmail, teamAlertHtml, customerReceiptHtml, getEmailMode } from "@/lib/email/sender";
+import {
+  sendEmail,
+  notificationEmail,
+  getEmailMode,
+  type EmailMode,
+  type NotificationType,
+} from "@/lib/email/sender";
 import { siteConfig } from "@/config/site";
 import { getService } from "@/config/services";
 
@@ -19,13 +25,12 @@ export interface CreateInput {
 }
 
 export interface NotificationStatus {
-  type: "team_new_enquiry" | "customer_receipt";
-  to: string;
+  type: NotificationType;
   status: "sent" | "failed" | "skipped";
   messageId?: string | null;
   errorCode?: string | null;
   /** "log-only" = written to terminal only, no real email left the server. */
-  mode: "smtp" | "log-only";
+  mode: EmailMode;
 }
 
 export async function createEnquiryUseCase(input: CreateInput) {
@@ -224,7 +229,9 @@ export async function createEnquiryUseCase(input: CreateInput) {
     process.env.INTERNAL_NOTIFICATION_EMAIL ||
     "team@example.com";
   const emailMode = getEmailMode();
-  console.log(`[enquiry] saving service=${normalized.serviceSlug} team_to=${teamRecipient} customer_to=${normalized.emailNormalized} email_mode=${emailMode}`);
+  console.log(
+    `[enquiry] saving service=${normalized.serviceSlug} email_mode=${emailMode}`
+  );
   store.outbox.push({
     id: randomUUID(),
     enquiryId: id,
@@ -272,8 +279,6 @@ export async function createEnquiryUseCase(input: CreateInput) {
     serviceTitle: service?.title ?? normalized.serviceSlug,
     projectTitle: normalized.projectTitle,
     adminUrl: `${siteUrl}/admin/enquiries/${id}`,
-    contactEmail: teamRecipient,
-    customerEmail: normalized.emailNormalized,
   });
 
   const summary = notifications.map((n) => `${n.type}=${n.status}${n.mode === "log-only" ? "(log-only)" : ""}${n.errorCode ? `(${n.errorCode})` : ""}`).join(" ");
@@ -349,44 +354,51 @@ async function createEnquiryMongoFlow(
   const service = getService(normalized.serviceSlug);
   const siteUrl = siteConfig.siteUrl;
   const emailMode = getEmailMode();
-  console.log(`[enquiry] saving (mongo) service=${normalized.serviceSlug} team_to=${teamRecipient} customer_to=${normalized.emailNormalized} email_mode=${emailMode}`);
+  console.log(
+    `[enquiry] saving (mongo) service=${normalized.serviceSlug} email_mode=${emailMode}`
+  );
   const jobs = await readOutboxForMongo(created.enquiryId);
   const notifications: NotificationStatus[] = [];
   for (const job of jobs) {
     const claimed = await markOutboxProcessingMongo(job.id);
     if (!claimed) continue;
-    const isTeam = job.notificationType === "team_new_enquiry";
-    console.log(`[enquiry] sending ${job.notificationType} to=${job.recipient} ref=${created.referenceNumber}`);
+    const content = notificationEmail({
+      type: job.notificationType,
+      referenceNumber: created.referenceNumber,
+      serviceTitle: service?.title ?? normalized.serviceSlug,
+      projectTitle: normalized.projectTitle,
+      adminUrl: `${siteUrl}/admin/enquiries/${created.enquiryId}`,
+      contactEmail: siteConfig.contactEmail,
+    });
+    console.log(
+      `[enquiry] sending ${job.notificationType} ref=${created.referenceNumber}`
+    );
     let result;
     try {
       result = await sendEmail({
         to: job.recipient,
-        subject: isTeam
-          ? `New project enquiry — ${created.referenceNumber} — ${service?.title ?? normalized.serviceSlug}`
-          : `We received your project enquiry — ${created.referenceNumber}`,
-        html: isTeam
-          ? teamAlertHtml(
-              created.referenceNumber,
-              service?.title ?? normalized.serviceSlug,
-              normalized.projectTitle,
-              `${siteUrl}/admin/enquiries/${created.enquiryId}`
-            )
-          : customerReceiptHtml(created.referenceNumber, teamRecipient),
+        ...content,
         type: job.notificationType,
+        idempotencyKey: job.id,
       });
-    } catch (err) {
-      console.error(`[enquiry] email THREW ${job.notificationType} to=${job.recipient} detail=${String((err as { message?: unknown })?.message ?? err).slice(0, 200)}`);
-      result = { ok: false as const, errorCode: "send_threw", mode: emailMode as "smtp" | "log-only" };
+    } catch {
+      console.error(
+        `[enquiry] email THREW ${job.notificationType} ref=${created.referenceNumber}`
+      );
+      result = { ok: false as const, errorCode: "send_threw", mode: emailMode };
     }
     try {
       await completeOutboxJobMongo(job.id, result);
     } catch (err) {
-      console.error(`[enquiry] outbox update FAILED job=${job.id} detail=${String((err as { message?: unknown })?.message ?? err).slice(0, 200)}`);
+      console.error(
+        `[enquiry] outbox update FAILED job=${job.id} detail=${String((err as { message?: unknown })?.message ?? err).slice(0, 200)}`
+      );
     }
-    console.log(`[enquiry] ${job.notificationType} -> ${result.ok ? "sent" : `FAILED(${result.errorCode ?? "send_failed"})`} to=${job.recipient}${result.mode === "log-only" ? " [log-only, no real email]" : ""}`);
+    console.log(
+      `[enquiry] ${job.notificationType} -> ${result.ok ? "sent" : `FAILED(${result.errorCode ?? "send_failed"})`}${result.mode === "log-only" ? " [log-only, no real email]" : ""}`
+    );
     notifications.push({
       type: job.notificationType,
-      to: job.recipient,
       status: result.ok ? "sent" : "failed",
       messageId: result.messageId ?? null,
       errorCode: result.ok ? null : (result.errorCode ?? "send_failed"),
@@ -412,8 +424,6 @@ async function deliverJobs(
     serviceTitle: string;
     projectTitle: string;
     adminUrl: string;
-    contactEmail: string;
-    customerEmail: string;
   }
 ): Promise<NotificationStatus[]> {
   const { readStore: rs, writeStore: ws } = await import("@/server/db");
@@ -431,22 +441,29 @@ async function deliverJobs(
     row.status = "processing";
     row.attemptCount += 1;
     row.lastAttemptAt = new Date().toISOString();
-    const isTeam = row.notificationType === "team_new_enquiry";
-    console.log(`[enquiry] sending ${row.notificationType} to=${row.recipient} ref=${ctx.referenceNumber}`);
+    const content = notificationEmail({
+      type: row.notificationType,
+      referenceNumber: ctx.referenceNumber,
+      serviceTitle: ctx.serviceTitle,
+      projectTitle: ctx.projectTitle,
+      adminUrl: ctx.adminUrl,
+      contactEmail: siteConfig.contactEmail,
+    });
+    console.log(
+      `[enquiry] sending ${row.notificationType} ref=${ctx.referenceNumber}`
+    );
     let result;
     try {
       result = await sendEmail({
         to: row.recipient,
-        subject: isTeam
-          ? `New project enquiry — ${ctx.referenceNumber} — ${ctx.serviceTitle}`
-          : `We received your project enquiry — ${ctx.referenceNumber}`,
-        html: isTeam
-          ? teamAlertHtml(ctx.referenceNumber, ctx.serviceTitle, ctx.projectTitle, ctx.adminUrl)
-          : customerReceiptHtml(ctx.referenceNumber, ctx.contactEmail),
+        ...content,
         type: row.notificationType,
+        idempotencyKey: row.id,
       });
-    } catch (err) {
-      console.error(`[enquiry] email THREW ${row.notificationType} to=${row.recipient} detail=${String((err as { message?: unknown })?.message ?? err).slice(0, 200)}`);
+    } catch {
+      console.error(
+        `[enquiry] email THREW ${row.notificationType} ref=${ctx.referenceNumber}`
+      );
       result = { ok: false as const, errorCode: "send_threw", mode: getEmailMode() };
     }
     if (result.ok) {
@@ -458,10 +475,11 @@ async function deliverJobs(
       row.status = "failed";
       row.lastErrorCode = result.errorCode ?? "send_failed";
     }
-    console.log(`[enquiry] ${row.notificationType} -> ${result.ok ? "sent" : `FAILED(${result.errorCode ?? "send_failed"})`} to=${row.recipient}${result.mode === "log-only" ? " [log-only, no real email]" : ""}`);
+    console.log(
+      `[enquiry] ${row.notificationType} -> ${result.ok ? "sent" : `FAILED(${result.errorCode ?? "send_failed"})`}${result.mode === "log-only" ? " [log-only, no real email]" : ""}`
+    );
     notifications.push({
       type: row.notificationType,
-      to: row.recipient,
       status: result.ok ? "sent" : "failed",
       messageId: result.messageId ?? null,
       errorCode: result.ok ? null : (result.errorCode ?? "send_failed"),

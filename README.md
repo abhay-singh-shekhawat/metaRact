@@ -8,9 +8,10 @@ implemented per `docs/architecture.md` (DSS-ARCH-001 v2.0).
 Next.js 15 App Router + TypeScript (strict) + Tailwind CSS v4 + Zod.
 MongoDB Atlas for production; file-backed store (`.data/studio.json`)
 for local development and tests when `MONGODB_URI` is absent.
-Gmail SMTP via Nodemailer (log-only fallback in dev), Cloudflare Turnstile
-(fail-closed in production, bypass in dev), Upstash Redis rate limiting
-(in-memory fallback in dev).
+Gmail SMTP via Nodemailer for transactional email (free, no domain needed;
+log-only fallback in dev), with Resend available when a verified domain exists.
+Cloudflare Turnstile (fail-closed in production, bypass in dev), Upstash Redis
+rate limiting (in-memory fallback in dev).
 
 > No invented business facts: the portfolio shows only approved entries (one
 > labelled concept), and the four policy pages publish the operator's supplied
@@ -46,17 +47,62 @@ Local admin sign-in: `/admin/sign-in` with `ADMIN_DEV_EMAIL` + `ADMIN_DEV_PASSWO
 3. Bootstrap the first admin (see below), then set
    `ADMIN_BOOTSTRAP_ALLOWED=false`.
 
-## Gmail SMTP setup
+## Email setup
 
-1. On the studio Gmail account, enable 2-Step Verification, then create an
-   App Password (Google Account → Security → App passwords).
-2. Set `GMAIL_USER` (the Gmail address), `GMAIL_APP_PASSWORD` (the 16-char
-   app password, no spaces), `EMAIL_FROM`, and `INTERNAL_NOTIFICATION_EMAIL`.
-3. Without Gmail credentials the app uses the log-only adapter (marked sent,
-   logged server-side) so the enquiry flow stays testable.
-4. Troubleshoot: `auth_failed` means the app password is wrong/revoked;
-   `transient_failure` means a network/timeout issue — the enquiry is still
-   saved and the notification can be retried from the admin panel.
+Two transports exist. Gmail SMTP is used whenever it is configured, because it
+is free and needs no domain. Resend is used only when Gmail is absent and a
+verified domain exists.
+
+### Gmail SMTP (free, default)
+
+1. Enable 2-Step Verification on the Google account, then create an App
+   Password (Google Account → Security → App passwords).
+2. Set `GMAIL_USER` to that account, `GMAIL_APP_PASSWORD` to the 16-character
+   App Password (spaces are ignored), and `AGENCY_EMAIL` to the **same**
+   address. Gmail silently rewrites any other `From`, so the app refuses the
+   configuration instead.
+3. Set `AGENCY_NOTIFICATION_EMAIL` to the founder/team inbox(es) that receive
+   new-enquiry alerts; optionally `AGENCY_EMAIL_NAME`, `AGENCY_REPLY_TO`,
+   `AGENCY_BCC_EMAIL`.
+4. Limits: a free Gmail account can send to roughly 500 recipients per day.
+   Exceeding that surfaces as `transient_failure` and is retryable.
+
+SMTP runs over TLS on port 465, which Cloudflare Workers support with
+`nodejs_compat` (port 25 is blocked). This was verified in the local `workerd`
+runtime, not just in Node.
+
+### Resend (optional alternative)
+
+1. Verify a sending domain in the Resend dashboard. Without a verified domain
+   Resend only delivers to the account owner's own address, which is useless
+   for customer receipts. `*.workers.dev` cannot be verified: Cloudflare owns
+   that zone.
+2. Set `RESEND_API_KEY` and leave the Gmail variables blank. Set `AGENCY_EMAIL`
+   to an address on the verified domain.
+
+### Either transport
+
+- Without a configured transport the app uses the log-only adapter in
+  development. Production records a failed notification instead of a fake
+  "sent" status.
+- Troubleshoot: `auth_failed` means the credentials or sender identity were
+  rejected; `invalid_recipient` means local recipient validation failed (or the
+  provider rejected the address); `transient_failure` means a rate limit,
+  quota, or network/server issue — the enquiry is still saved and the
+  notification can be retried from the admin panel.
+
+Safe delivery check (operator-only; not a public endpoint):
+
+```bash
+# Set the server-only email values for this shell first (or point tsx at
+# .env.local: pnpm exec tsx --env-file=.env.local --conditions=react-server \
+#   scripts/send-test-email.ts you@example.com)
+pnpm email:test -- you@example.com
+```
+
+The script uses the real sender adapter, sends one message to the address you
+pass, and prints only the transport and message id. It does not run in
+automated tests.
 
 ## Commands
 
@@ -71,6 +117,7 @@ Local admin sign-in: `/admin/sign-in` with `ADMIN_DEV_EMAIL` + `ADMIN_DEV_PASSWO
 | `pnpm test:e2e` | Playwright critical journeys (needs dev server) |
 | `pnpm db:reset` | reset local `.data/studio.json` |
 | `pnpm check:production-config` | production preflight (fails on placeholders/missing secrets) |
+| `pnpm email:test -- you@example.com` | operator-only delivery check (not a route) |
 
 ## Admin bootstrap (production)
 
@@ -96,9 +143,11 @@ delete their rows in `admin_sessions` (or wait for the 12h TTL expiry).
   verification, and rollback.
 - Point `MONGODB_URI` at a dedicated production cluster; verify collections
   and indexes; enable provider backups.
-- Configure Gmail App Password (`GMAIL_USER`, `GMAIL_APP_PASSWORD`),
-  verified `EMAIL_FROM`, monitored `INTERNAL_NOTIFICATION_EMAIL`,
-  Turnstile keys, Upstash Redis, canonical `NEXT_PUBLIC_SITE_URL` (https).
+- Configure email (`GMAIL_USER` + `GMAIL_APP_PASSWORD` with a matching
+  `AGENCY_EMAIL`, or `RESEND_API_KEY` with a verified-domain `AGENCY_EMAIL`),
+  a monitored `AGENCY_NOTIFICATION_EMAIL`, Turnstile keys, Upstash Redis, a
+  canonical `NEXT_PUBLIC_SITE_URL` (https), and send a real test with
+  `pnpm email:test -- you@example.com`.
 - `ADMIN_BOOTSTRAP_ALLOWED=false` in production runtime.
 - Approve contact email, services, and portfolio entries; bootstrap founder
   accounts; complete backup test-restore. (Studio name and all four policy pages
@@ -111,8 +160,9 @@ delete their rows in `admin_sessions` (or wait for the 12h TTL expiry).
   were verified against a local replica set in the Workers runtime; connecting
   to Atlas from Cloudflare's edge remains a post-deploy check (see
   `CLOUDFLARE_DEPLOYMENT.md`).
-- Email without Gmail credentials uses the log-only adapter (marked sent,
-  logged server-side) so the enquiry flow stays testable.
+- Email without Gmail SMTP credentials or a Resend key uses the log-only adapter
+  in development (marked sent, logged server-side) so the enquiry flow stays
+  testable. Production fails the notification instead.
 - `ADMIN_DEV_*` fallback auth is development-only; production enforces
   MongoDB-backed admin users + sessions when `MONGODB_URI` is present.
 

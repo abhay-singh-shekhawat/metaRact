@@ -6,7 +6,9 @@ import {
   type EnquiryStatus,
 } from "@/server/policies/statusMachine";
 import type { AdminIdentity } from "@/server/policies/adminAuth";
-import { sendEmail } from "@/lib/email/sender";
+import { notificationEmail, sendEmail } from "@/lib/email/sender";
+import { siteConfig } from "@/config/site";
+import { getService } from "@/config/services";
 
 export interface ListParams {
   status?: string;
@@ -198,6 +200,42 @@ export async function addNoteUseCase(
   return { ok: true as const, status: 201 };
 }
 
+type RetryEnquiry = {
+  id: string;
+  referenceNumber: string;
+  serviceSlug: string;
+  projectTitle: string;
+};
+
+/**
+ * Rebuild the original notification instead of sending a generic "retry" body.
+ * Identical content plus the outbox id (Resend idempotency key, or the SMTP
+ * Message-ID) lets the provider drop a duplicate if the first request was
+ * accepted but its outbox update never landed.
+ */
+function retryContent(
+  type: "team_new_enquiry" | "customer_receipt",
+  enquiry: RetryEnquiry | null
+): { subject: string; html: string } {
+  if (!enquiry) {
+    return {
+      subject:
+        type === "team_new_enquiry"
+          ? "New project enquiry (retry)"
+          : "We received your project enquiry (retry)",
+      html: "<p>Retry of a previous notification. See the admin panel for details.</p>",
+    };
+  }
+  return notificationEmail({
+    type,
+    referenceNumber: enquiry.referenceNumber,
+    serviceTitle: getService(enquiry.serviceSlug)?.title ?? enquiry.serviceSlug,
+    projectTitle: enquiry.projectTitle,
+    adminUrl: `${siteConfig.siteUrl}/admin/enquiries/${enquiry.id}`,
+    contactEmail: siteConfig.contactEmail,
+  });
+}
+
 export async function retryNotificationUseCase(
   notificationId: string,
   _admin: AdminIdentity
@@ -208,6 +246,7 @@ export async function retryNotificationUseCase(
       peekNotificationMongo,
       claimNotificationMongo,
       completeOutboxJobMongo,
+      getEnquiryMongo,
     } = await import("@/server/mongo-store");
     const peeked = await peekNotificationMongo(notificationId);
     if (!peeked) return { ok: false as const, status: 404, error: "Not found." };
@@ -233,14 +272,16 @@ export async function retryNotificationUseCase(
         error: "Only failed notifications can be retried.",
       };
     }
+    const detail = await getEnquiryMongo(claimed.enquiryId);
+    const content = retryContent(
+      claimed.notificationType,
+      detail?.enquiry ?? null
+    );
     const result = await sendEmail({
       to: claimed.recipient,
-      subject:
-        claimed.notificationType === "team_new_enquiry"
-          ? "New project enquiry (retry)"
-          : "We received your project enquiry (retry)",
-      html: "<p>Retry of a previous notification. See the admin panel for details.</p>",
+      ...content,
       type: claimed.notificationType,
+      idempotencyKey: claimed.id,
     });
     await completeOutboxJobMongo(claimed.id, result);
     const after = await peekNotificationMongo(notificationId);
@@ -272,14 +313,14 @@ export async function retryNotificationUseCase(
   row.status = "processing";
   row.attemptCount += 1;
   row.lastAttemptAt = new Date().toISOString();
+  const enquiry =
+    store.enquiries.find((e) => e.id === row.enquiryId) ?? null;
+  const content = retryContent(row.notificationType, enquiry);
   const result = await sendEmail({
     to: row.recipient,
-    subject:
-      row.notificationType === "team_new_enquiry"
-        ? "New project enquiry (retry)"
-        : "We received your project enquiry (retry)",
-    html: "<p>Retry of a previous notification. See the admin panel for details.</p>",
+    ...content,
     type: row.notificationType,
+    idempotencyKey: row.id,
   });
   if (result.ok) {
     row.status = "sent";

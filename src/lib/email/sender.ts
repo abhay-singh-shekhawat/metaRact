@@ -1,13 +1,16 @@
 import "server-only";
 
+export type EmailMode = "smtp" | "resend" | "log-only";
+export type NotificationType = "team_new_enquiry" | "customer_receipt";
+
 export interface EmailResult {
   ok: boolean;
   messageId?: string;
   errorCode?: string;
-  /** Short, safe-to-log provider detail (no credentials). */
+  /** Short, safe-to-log provider detail (no credentials or recipients). */
   detail?: string;
   /** Which adapter handled this send. */
-  mode?: "smtp" | "log-only";
+  mode?: EmailMode;
 }
 
 function escapeText(s: string): string {
@@ -46,11 +49,40 @@ export function teamAlertHtml(
   return `<p>New project enquiry <strong>${escapeText(ref)}</strong> — ${escapeText(serviceTitle)}</p><p>${escapeText(projectTitle)}</p><p>Review: ${escapeText(adminUrl)}</p>`;
 }
 
+/**
+ * Build the exact subject/body used for a notification. Admin retries use the
+ * same helper so a retry has the same payload as the original attempt; that is
+ * what lets the provider drop a duplicate when only the outbox update failed.
+ */
+export function notificationEmail(opts: {
+  type: NotificationType;
+  referenceNumber: string;
+  serviceTitle: string;
+  projectTitle: string;
+  adminUrl: string;
+  contactEmail: string;
+}): { subject: string; html: string } {
+  const isTeam = opts.type === "team_new_enquiry";
+  return {
+    subject: isTeam
+      ? `New project enquiry — ${opts.referenceNumber} — ${opts.serviceTitle}`
+      : `We received your project enquiry — ${opts.referenceNumber}`,
+    html: isTeam
+      ? teamAlertHtml(
+          opts.referenceNumber,
+          opts.serviceTitle,
+          opts.projectTitle,
+          opts.adminUrl
+        )
+      : customerReceiptHtml(opts.referenceNumber, opts.contactEmail),
+  };
+}
+
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /**
  * Accept one address or a comma/semicolon-separated list. Keeping this in one
- * place means the team-alert recipient, retries, and the transport all agree.
+ * place means the team-alert recipient, retries, and the provider all agree.
  */
 export function parseRecipients(raw: string): string[] {
   return raw
@@ -59,30 +91,163 @@ export function parseRecipients(raw: string): string[] {
     .filter(Boolean);
 }
 
-export function isGmailConfigured(): boolean {
-  return Boolean(process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD && fromAddress());
-}
-
-/** Which adapter sendEmail() will use. "log-only" means NO real email leaves the server. */
-export function getEmailMode(): "smtp" | "log-only" {
-  return isGmailConfigured() ? "smtp" : "log-only";
+function toBareAddress(raw: string): string | null {
+  const trimmed = raw.trim().replace(/^["']|["']$/g, "").trim();
+  if (!trimmed) return null;
+  const match = trimmed.match(/<([^<>@\s]+@[^<>@\s]+\.[^<>@\s]+)>\s*$/);
+  return match ? match[1] : trimmed;
 }
 
 function fromAddress(): string | null {
-  const raw = (process.env.AGENCY_EMAIL || process.env.EMAIL_FROM || "")
-    .trim()
-    .replace(/^["']|["']$/g, "")
-    .trim();
-  if (!raw) return null;
-  const m = raw.match(/<([^<>@\s]+@[^<>@\s]+\.[^<>@\s]+)>\s*$/);
-  return m ? m[1] : raw;
+  return toBareAddress(
+    process.env.AGENCY_EMAIL || process.env.EMAIL_FROM || ""
+  );
+}
+
+function smtpUser(): string {
+  return (process.env.GMAIL_USER || "").trim();
+}
+
+function smtpPassword(): string {
+  // Gmail displays app passwords in groups of four; the spaces are cosmetic.
+  return (process.env.GMAIL_APP_PASSWORD || "").replace(/\s+/g, "").trim();
 }
 
 /**
- * The From header, optionally decorated with the agency display name.
- * Falls back to the bare address when AGENCY_EMAIL_NAME is unset, so existing
- * EMAIL_FROM-only setups keep their exact previous header.
+ * Gmail only accepts a `From` that matches the authenticated account or a
+ * verified "Send as" alias; anything else is silently rewritten. Refusing the
+ * configuration is clearer than sending mail under an identity we did not set.
  */
+function smtpConfigIssue(): string | null {
+  const user = smtpUser();
+  if (!user) return "GMAIL_USER is not configured.";
+  if (!smtpPassword()) return "GMAIL_APP_PASSWORD is not configured.";
+  const addr = fromAddress();
+  if (!addr || !EMAIL_RE.test(addr)) {
+    return "AGENCY_EMAIL (or EMAIL_FROM) must be a valid sender address.";
+  }
+  if (addr.toLowerCase() !== user.toLowerCase()) {
+    return 'AGENCY_EMAIL must equal GMAIL_USER (or be a verified Gmail "Send as" alias).';
+  }
+  return null;
+}
+
+function resendConfigIssue(): string | null {
+  if (!process.env.RESEND_API_KEY?.trim()) {
+    return "RESEND_API_KEY is not configured.";
+  }
+  const addr = fromAddress();
+  if (!addr || !EMAIL_RE.test(addr)) {
+    return "AGENCY_EMAIL (or EMAIL_FROM) must be a valid sender address on a domain verified in Resend.";
+  }
+  return null;
+}
+
+/**
+ * Gmail SMTP needs no domain and no paid plan, so it wins whenever it is
+ * configured. Resend is used when a verified domain exists instead. "log-only"
+ * means NO real email leaves the server.
+ */
+export function getEmailMode(): EmailMode {
+  if (smtpConfigIssue() === null) return "smtp";
+  if (resendConfigIssue() === null) return "resend";
+  return "log-only";
+}
+
+function configIssue(): string | null {
+  const smtp = smtpConfigIssue();
+  const resend = resendConfigIssue();
+  if (smtp === null || resend === null) return null;
+  return `${smtp} ${resend}`;
+}
+
+export function isEmailConfigured(): boolean {
+  return configIssue() === null;
+}
+
+export type MailPayload = {
+  from: string;
+  to: string[];
+  subject: string;
+  html: string;
+  text: string;
+  replyTo?: string;
+  bcc?: string[];
+  messageId?: string;
+};
+
+type Transport = (
+  payload: MailPayload,
+  mode: "smtp" | "resend",
+  idempotencyKey?: string
+) => Promise<EmailResult>;
+
+declare global {
+  var __mailTransportForTests: Transport | undefined;
+}
+
+/** Test hook: replaces the network call. Never set in production. */
+export function __setMailTransportForTests(transport: Transport | undefined): void {
+  globalThis.__mailTransportForTests = transport;
+}
+
+function errorName(err: unknown): string {
+  const name = (err as { name?: unknown })?.name;
+  return typeof name === "string" && name ? name : "unknown_error";
+}
+
+function errorCodeOf(err: unknown): string {
+  const code = (err as { code?: unknown })?.code;
+  return typeof code === "string" && code ? code : "";
+}
+
+function responseCodeOf(err: unknown): number | null {
+  const code = (err as { responseCode?: unknown })?.responseCode;
+  return typeof code === "number" ? code : null;
+}
+
+/** Provider text can echo a recipient address, so only the codes are kept. */
+function smtpErrorDetail(err: unknown): string {
+  const parts = [errorName(err)];
+  const code = errorCodeOf(err);
+  const response = responseCodeOf(err);
+  if (code) parts.push(code);
+  if (response !== null) parts.push(`smtp=${response}`);
+  return parts.join(" ").slice(0, 120);
+}
+
+const QUOTA_TEXT = /(daily|hourly|sending) (user )?(limit|quota)|too many|rate limit|try again later/i;
+
+/**
+ * Nodemailer surfaces SMTP failures as codes and numeric replies. Mapping them
+ * here is what lets the admin outbox show an actionable reason instead of a
+ * generic failure.
+ */
+export function classifySmtpError(err: unknown): string {
+  const code = errorCodeOf(err);
+  const response = responseCodeOf(err);
+  const responseText = String((err as { response?: unknown })?.response ?? "");
+  if (QUOTA_TEXT.test(responseText)) return "transient_failure";
+  if (code === "EAUTH" || response === 530 || response === 534 || response === 535) {
+    return "auth_failed";
+  }
+  if (code === "EENVELOPE" || response === 550 || response === 551 || response === 553) {
+    return "invalid_recipient";
+  }
+  if (
+    code === "ETIMEDOUT" ||
+    code === "ESOCKET" ||
+    code === "ECONNECTION" ||
+    code === "EDNS" ||
+    code === "EPROTOCOL" ||
+    code === "EAI_AGAIN" ||
+    (response !== null && response >= 400 && response < 500)
+  ) {
+    return "transient_failure";
+  }
+  return "provider_error";
+}
+
 function fromHeader(): string {
   const addr = fromAddress();
   if (!addr) return "";
@@ -93,76 +258,153 @@ function fromHeader(): string {
   return safeName ? `"${safeName}" <${addr}>` : addr;
 }
 
-function configError(): string | null {
-  if (!process.env.GMAIL_USER) return "GMAIL_USER is not configured.";
-  if (!process.env.GMAIL_APP_PASSWORD) return "GMAIL_APP_PASSWORD is not configured.";
-  const addr = fromAddress();
-  if (!addr || !EMAIL_RE.test(addr))
-    return "AGENCY_EMAIL (or EMAIL_FROM) is not configured or not a valid email address.";
-  return null;
+function replyToAddress(): string | undefined {
+  const raw = (process.env.AGENCY_REPLY_TO || "").trim();
+  return raw || undefined;
 }
 
-type Transport = {
-  sendMail: (opts: {
-    from: string;
-    replyTo?: string;
-    bcc?: string;
-    to: string | string[];
-    subject: string;
-    html: string;
-    text: string;
-  }) => Promise<{ messageId?: string }>;
-  verify?: () => Promise<unknown>;
-};
-
-declare global {
-  var __gmailTransport: Transport | undefined;
+function bccAddresses(): string[] | undefined {
+  const raw = (process.env.AGENCY_BCC_EMAIL || "").trim();
+  if (!raw) return undefined;
+  const addresses = parseRecipients(raw);
+  return addresses.length ? addresses : undefined;
 }
 
 /**
- * SMTP transports own a live socket, and a Worker request may not perform I/O
- * on a socket created by an earlier request. A module-level singleton would
- * therefore work for the first send and fail on the next one, so each send gets
- * its own transport and closes it afterwards.
- *
- * (Gmail SMTP over `node:net`/`node:tls` requires `nodejs_compat`, which this
- * Worker enables. Delivery is not exercised by the local preview tests.)
+ * Gmail SMTP over TLS (port 465). Cloudflare Workers support outbound TCP on
+ * this port with `nodejs_compat`; port 25 is blocked and is not used here. The
+ * transport is created per send and closed afterwards so no socket is shared
+ * across requests.
  */
-async function createTransport(): Promise<Transport> {
+async function sendViaSmtp(payload: MailPayload): Promise<EmailResult> {
   const nodemailer = await import("nodemailer");
-  return nodemailer.createTransport({
+  const transport = nodemailer.createTransport({
     host: "smtp.gmail.com",
     port: 465,
     secure: true,
-    auth: {
-      user: process.env.GMAIL_USER?.trim(),
-      // Google displays app passwords in groups of four. Strip any spaces the
-      // operator pasted from the Google UI; SMTP expects the bare 16 chars.
-      pass: process.env.GMAIL_APP_PASSWORD?.replace(/\s+/g, ""),
-    },
-    connectionTimeout: 10000,
-    greetingTimeout: 10000,
-    socketTimeout: 15000,
-  }) as unknown as Transport;
-}
-
-/** Test hook: replace the SMTP transport with a stub. Never used in production. */
-export function __setEmailTransportForTests(transport: Transport | undefined): void {
-  globalThis.__gmailTransport = transport;
-}
-
-function classifySmtpError(err: unknown): string {
-  const code = (err as { code?: string; responseCode?: number })?.code;
-  if (code === "EAUTH" || code === "EENVELOPE") return "auth_failed";
-  if (
-    code === "ETIMEDOUT" ||
-    code === "ESOCKET" ||
-    code === "ECONNECTION" ||
-    code === "EGREETING"
-  ) {
-    return "transient_failure";
+    auth: { user: smtpUser(), pass: smtpPassword() },
+    connectionTimeout: 15_000,
+    greetingTimeout: 15_000,
+    socketTimeout: 25_000,
+  });
+  try {
+    const info = await transport.sendMail({
+      from: payload.from,
+      to: payload.to,
+      subject: payload.subject,
+      html: payload.html,
+      text: payload.text,
+      replyTo: payload.replyTo,
+      bcc: payload.bcc,
+      messageId: payload.messageId,
+    });
+    const messageId = info?.messageId;
+    if (!messageId) {
+      return {
+        ok: false,
+        errorCode: "provider_error",
+        mode: "smtp",
+        detail: "SMTP accepted the message but returned no message id.",
+      };
+    }
+    return { ok: true, messageId, mode: "smtp" };
+  } catch (err) {
+    return {
+      ok: false,
+      errorCode: classifySmtpError(err),
+      mode: "smtp",
+      detail: smtpErrorDetail(err),
+    };
+  } finally {
+    transport.close();
   }
-  return "provider_error";
+}
+
+type ResendPayload = {
+  from: string;
+  to: string[];
+  subject: string;
+  html: string;
+  text: string;
+  replyTo?: string;
+  bcc?: string[];
+};
+
+type ResendResponse = {
+  data?: { id?: string } | null;
+  error?: { name?: string; statusCode?: number | null } | null;
+};
+
+async function sendViaResend(
+  payload: MailPayload,
+  idempotencyKey?: string
+): Promise<EmailResult> {
+  const apiKey = process.env.RESEND_API_KEY?.trim();
+  if (!apiKey) {
+    return { ok: false, errorCode: "email_not_configured", mode: "resend" };
+  }
+  try {
+    const { Resend } = await import("resend");
+    const body: ResendPayload = {
+      from: payload.from,
+      to: payload.to,
+      subject: payload.subject,
+      html: payload.html,
+      text: payload.text,
+    };
+    if (payload.replyTo) body.replyTo = payload.replyTo;
+    if (payload.bcc) body.bcc = payload.bcc;
+    const resend = new Resend(apiKey);
+    const result: ResendResponse = await resend.emails.send(
+      body,
+      idempotencyKey ? { idempotencyKey } : undefined
+    );
+    if (result?.error) {
+      const status =
+        typeof result.error.statusCode === "number" ? result.error.statusCode : null;
+      const name = result.error.name ?? "unknown_error";
+      const errorCode =
+        status === 401 || status === 403 || name === "invalid_api_key"
+          ? "auth_failed"
+          : status === 429 || (status !== null && status >= 500)
+            ? "transient_failure"
+            : "provider_error";
+      return {
+        ok: false,
+        errorCode,
+        mode: "resend",
+        detail: `${name}${status !== null ? ` status=${status}` : ""}`.slice(0, 120),
+      };
+    }
+    const messageId = result?.data?.id;
+    if (!messageId) {
+      return {
+        ok: false,
+        errorCode: "provider_error",
+        mode: "resend",
+        detail: "Resend returned no message id.",
+      };
+    }
+    return { ok: true, messageId, mode: "resend" };
+  } catch (err) {
+    const name = errorName(err);
+    const errorCode =
+      name === "AbortError" || name === "TimeoutError" || name === "TypeError"
+        ? "transient_failure"
+        : "provider_error";
+    return { ok: false, errorCode, mode: "resend", detail: name.slice(0, 120) };
+  }
+}
+
+/**
+ * Stable Message-ID derived from the outbox job id. Gmail drops a second
+ * message with an identical Message-ID, which makes a retry after a partial
+ * failure safe even though SMTP has no idempotency key of its own.
+ */
+function messageIdFor(idempotencyKey: string | undefined): string | undefined {
+  if (!idempotencyKey) return undefined;
+  const domain = fromAddress()?.split("@")[1] || "localhost";
+  return `<${idempotencyKey}@${domain}>`;
 }
 
 export async function sendEmail(opts: {
@@ -170,64 +412,91 @@ export async function sendEmail(opts: {
   subject: string;
   html: string;
   type: string;
+  /**
+   * Stable outbox job id. Resend uses it as Idempotency-Key and SMTP uses it as
+   * the Message-ID, so retrying the same notification cannot deliver twice.
+   */
+  idempotencyKey?: string;
 }): Promise<EmailResult> {
-  const misconfigured = configError();
-  if (misconfigured) {
+  const mode = getEmailMode();
+  const misconfigured = configIssue();
+
+  if (misconfigured || mode === "log-only") {
     // In development/test, log-only keeps the enquiry flow verifiable without
     // credentials. In production, silence is dangerous: report a failed
     // notification so the admin outbox shows the real reason instead of a
     // misleading "sent" row for an email that never left the server.
     if (process.env.NODE_ENV === "production") {
       console.error(
-        `[email][smtp] NOT CONFIGURED (${misconfigured}) type=${opts.type} to=${opts.to}`
+        `[email][not-configured] ${misconfigured} type=${opts.type} recipients=${parseRecipients(opts.to).length}`
       );
       return {
         ok: false,
         errorCode: "email_not_configured",
-        mode: "smtp",
-        detail: misconfigured,
+        mode: "log-only",
+        detail: misconfigured ?? "No email transport is configured.",
       };
     }
-    // Dev/test fallback: log-only adapter, marked sent so the enquiry flow
-    // stays verifiable without credentials. Production preflight blocks launch.
+    // Dev/test fallback: marked sent so the enquiry flow stays verifiable.
     // Loud terminal line so operators never mistake this for a real send.
     console.log(
-      `[email][log-only-mode] NOT sending real email (${misconfigured}) type=${opts.type} to=${opts.to} subject=${opts.subject}`
+      `[email][log-only-mode] NOT sending real email (${misconfigured}) type=${opts.type} recipients=${parseRecipients(opts.to).length} subject=${opts.subject}`
     );
-    return { ok: true, messageId: `log-${Date.now()}`, mode: "log-only", detail: misconfigured };
+    return {
+      ok: true,
+      messageId: `log-${Date.now()}`,
+      mode: "log-only",
+      detail: misconfigured ?? "No email transport is configured.",
+    };
   }
+
   const recipients = parseRecipients(opts.to);
-  if (!recipients.length || recipients.some((address) => !EMAIL_RE.test(address))) {
-    console.error(`[email][smtp] invalid recipient type=${opts.type} to=${opts.to}`);
-    return { ok: false, errorCode: "invalid_recipient", mode: "smtp", detail: "Recipient address failed validation." };
-  }
-  const injected = globalThis.__gmailTransport;
-  const transport = injected ?? (await createTransport());
-  try {
-    const info = await transport.sendMail({
-      from: fromHeader(),
-      replyTo: process.env.AGENCY_REPLY_TO || undefined,
-      bcc: process.env.AGENCY_BCC_EMAIL || undefined,
-      to: recipients,
-      subject: opts.subject,
-      html: opts.html,
-      text: htmlToText(opts.html),
-    });
-    // Accepted by Gmail for submission. Confirmed delivery is not observable
-    // here; downstream bounces are handled out of band.
-    console.log(
-      `[email][smtp] sent type=${opts.type} to=${recipients.join(",")} messageId=${info?.messageId ?? "unknown"}`
+  if (
+    !recipients.length ||
+    recipients.length > 50 ||
+    recipients.some((address) => !EMAIL_RE.test(address))
+  ) {
+    console.error(
+      `[email][${mode}] invalid recipient type=${opts.type} recipients=${recipients.length}`
     );
-    return { ok: true, messageId: info?.messageId, mode: "smtp" };
-  } catch (err) {
-    const code = classifySmtpError(err);
-    const detail = String((err as { message?: unknown })?.message ?? err).slice(0, 200);
-    console.error(`[email][smtp] FAILED type=${opts.type} to=${recipients.join(",")} errorCode=${code} detail=${detail}`);
-    return { ok: false, errorCode: code, mode: "smtp", detail };
-  } finally {
-    // Injected transports belong to the caller (tests); only close our own.
-    if (!injected) {
-      (transport as Transport & { close?: () => void }).close?.();
-    }
+    return {
+      ok: false,
+      errorCode: "invalid_recipient",
+      mode,
+      detail: "Recipient address failed validation.",
+    };
   }
+
+  const payload: MailPayload = {
+    from: fromHeader(),
+    to: recipients,
+    subject: opts.subject,
+    html: opts.html,
+    text: htmlToText(opts.html),
+    messageId: messageIdFor(opts.idempotencyKey),
+  };
+  const replyTo = replyToAddress();
+  if (replyTo) payload.replyTo = replyTo;
+  const bcc = bccAddresses();
+  if (bcc) payload.bcc = bcc;
+
+  const transport: Transport =
+    globalThis.__mailTransportForTests ??
+    ((mail, activeMode, key) =>
+      activeMode === "smtp" ? sendViaSmtp(mail) : sendViaResend(mail, key));
+
+  const result = await transport(payload, mode, opts.idempotencyKey);
+  const finalMode = result.mode ?? mode;
+
+  if (!result.ok) {
+    console.error(
+      `[email][${finalMode}] FAILED type=${opts.type} recipients=${recipients.length} errorCode=${result.errorCode ?? "send_failed"} provider=${result.detail ?? "unknown"}`
+    );
+    return { ...result, mode: finalMode };
+  }
+
+  console.log(
+    `[email][${finalMode}] sent type=${opts.type} recipients=${recipients.length} messageId=${result.messageId ?? "unknown"}`
+  );
+  return { ...result, mode: finalMode };
 }

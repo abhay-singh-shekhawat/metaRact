@@ -46,8 +46,11 @@ export function isProductionConfigValid(): { ok: boolean; missing: string[] } {
   if (!process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY) missing.push("NEXT_PUBLIC_TURNSTILE_SITE_KEY");
   if (!process.env.MONGODB_URI) missing.push("MONGODB_URI");
   if (!process.env.MONGODB_DB_NAME) missing.push("MONGODB_DB_NAME");
-  if (!process.env.GMAIL_USER) missing.push("GMAIL_USER");
-  if (!process.env.GMAIL_APP_PASSWORD) missing.push("GMAIL_APP_PASSWORD");
+  const hasEmailTransport =
+    (process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD) ||
+    process.env.RESEND_API_KEY;
+  if (!hasEmailTransport)
+    missing.push("GMAIL_USER + GMAIL_APP_PASSWORD (or RESEND_API_KEY)");
   if (!process.env.AGENCY_EMAIL && !process.env.EMAIL_FROM)
     missing.push("AGENCY_EMAIL (or EMAIL_FROM)");
   if (!process.env.AGENCY_NOTIFICATION_EMAIL && !process.env.INTERNAL_NOTIFICATION_EMAIL)

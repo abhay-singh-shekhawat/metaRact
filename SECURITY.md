@@ -10,12 +10,16 @@ business days.
 ## Secrets
 
 - Never commit `.env.local` or real credentials. `.env.example` holds names only.
-- Server-only keys (`MONGODB_URI`, `GMAIL_APP_PASSWORD`,
+- Server-only keys (`MONGODB_URI`, `GMAIL_APP_PASSWORD`, `RESEND_API_KEY`,
   `TURNSTILE_SECRET_KEY`, `UPSTASH_REDIS_REST_TOKEN`) must
   never use `NEXT_PUBLIC_` or appear in client bundles, logs or screenshots.
-- Gmail uses an App Password (2-Step Verification required), never the
-  regular account password. If App Passwords are unavailable, use OAuth 2.0
-  rather than weakening account security.
+- `GMAIL_APP_PASSWORD` must be a Google App Password (2-Step Verification
+  required), never the account password, and must be a Worker secret. Gmail
+  SMTP only accepts a `from` equal to the authenticated account or a verified
+  “Send as” alias, so `AGENCY_EMAIL` must match `GMAIL_USER`.
+- If the Resend transport is used instead, scope the key to sending where the
+  dashboard allows it and set it as a Worker secret; the `from` address must be
+  on the verified Resend domain.
 - Rotate any exposed secret immediately in the provider dashboard and hosting
   secret manager, then invalidate old sessions/tokens.
 
@@ -24,7 +28,8 @@ business days.
 - Admin: set `isActive=false` on the user in `admin_users` and delete their
   rows in `admin_sessions` (sessions also expire after 12h via TTL).
 - If a device is lost: revoke that user's `admin_sessions` rows immediately;
-  rotate Gmail/Upstash keys as applicable and force re-login.
+  rotate the email credentials (App Password / Resend key) and Upstash tokens as
+  applicable, then force re-login.
 
 ## Incident triage
 

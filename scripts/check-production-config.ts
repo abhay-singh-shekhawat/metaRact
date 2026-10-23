@@ -36,8 +36,6 @@ if (!process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY) {
 const requiredServer = [
   "MONGODB_URI",
   "MONGODB_DB_NAME",
-  "GMAIL_USER",
-  "GMAIL_APP_PASSWORD",
   "TURNSTILE_SECRET_KEY",
   "UPSTASH_REDIS_REST_URL",
   "UPSTASH_REDIS_REST_TOKEN",
@@ -50,11 +48,28 @@ for (const key of requiredServer) {
   }
 }
 
+// Email needs one working transport. Gmail SMTP is free and needs no domain;
+// Resend needs a sender on a domain verified in the Resend dashboard.
+const hasSmtp = Boolean(process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD);
+const hasResend = Boolean(process.env.RESEND_API_KEY);
+if (!hasSmtp && !hasResend) {
+  console.error("MISSING: GMAIL_USER + GMAIL_APP_PASSWORD (or RESEND_API_KEY)");
+  failed = true;
+}
+
 // Agency email: the outbound identity and the inbox that receives notifications
 // (back-compat EMAIL_FROM / INTERNAL_NOTIFICATION_EMAIL are still honored).
 if (!process.env.AGENCY_EMAIL && !process.env.EMAIL_FROM) {
   console.error("MISSING: AGENCY_EMAIL (or EMAIL_FROM)");
   failed = true;
+} else if (hasSmtp && !hasResend) {
+  const sender = (process.env.AGENCY_EMAIL || process.env.EMAIL_FROM || "").trim();
+  if (sender.toLowerCase() !== (process.env.GMAIL_USER || "").trim().toLowerCase()) {
+    console.error(
+      'AGENCY_EMAIL must equal GMAIL_USER when using Gmail SMTP (or be a verified Gmail "Send as" alias).'
+    );
+    failed = true;
+  }
 }
 if (
   !process.env.AGENCY_NOTIFICATION_EMAIL &&

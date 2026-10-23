@@ -4,53 +4,103 @@ import {
   teamAlertHtml,
   customerReceiptHtml,
   htmlToText,
-  isGmailConfigured,
-  __setEmailTransportForTests,
+  notificationEmail,
+  isEmailConfigured,
+  getEmailMode,
+  classifySmtpError,
+  __setMailTransportForTests,
+  type MailPayload,
 } from "@/lib/email/sender";
 
 const SAVED = { ...process.env };
 
-function gmailEnv() {
-  process.env.GMAIL_USER = "studio@example.com";
-  process.env.GMAIL_APP_PASSWORD = "app-password-stub";
-  process.env.EMAIL_FROM = "studio@example.com";
-  delete process.env.AGENCY_EMAIL;
+const EMAIL_KEYS = [
+  "GMAIL_USER",
+  "GMAIL_APP_PASSWORD",
+  "RESEND_API_KEY",
+  "AGENCY_EMAIL",
+  "EMAIL_FROM",
+  "AGENCY_EMAIL_NAME",
+  "AGENCY_REPLY_TO",
+  "AGENCY_BCC_EMAIL",
+  "AGENCY_NOTIFICATION_EMAIL",
+  "INTERNAL_NOTIFICATION_EMAIL",
+  "NODE_ENV",
+] as const;
+
+function clearEmailEnv() {
+  for (const key of EMAIL_KEYS) delete process.env[key];
 }
 
-function clearGmailEnv() {
-  delete process.env.GMAIL_USER;
-  delete process.env.GMAIL_APP_PASSWORD;
+function smtpEnv() {
+  process.env.GMAIL_USER = "studio.owner@gmail.com";
+  process.env.GMAIL_APP_PASSWORD = "abcd efgh ijkl mnop";
+  process.env.AGENCY_EMAIL = "studio.owner@gmail.com";
   delete process.env.EMAIL_FROM;
-  delete process.env.AGENCY_EMAIL;
+}
+
+function resendEnv() {
+  process.env.RESEND_API_KEY = "re_test_stub";
+  process.env.AGENCY_EMAIL = "studio@example.com";
+  delete process.env.EMAIL_FROM;
+}
+
+/** Capture the payload the sender would have handed to the provider. */
+function captureTransport() {
+  const seen: { payload: MailPayload; mode: string; key?: string }[] = [];
+  __setMailTransportForTests(async (payload, mode, key) => {
+    seen.push({ payload, mode, key });
+    return { ok: true, messageId: "provider-id", mode };
+  });
+  return seen;
 }
 
 beforeEach(() => {
-  clearGmailEnv();
-  __setEmailTransportForTests(undefined);
+  clearEmailEnv();
+  __setMailTransportForTests(undefined);
 });
 
 afterEach(() => {
-  __setEmailTransportForTests(undefined);
-  for (const k of [
-    "GMAIL_USER",
-    "GMAIL_APP_PASSWORD",
-    "EMAIL_FROM",
-    "AGENCY_EMAIL",
-    "AGENCY_REPLY_TO",
-    "AGENCY_BCC_EMAIL",
-    "NODE_ENV",
-  ] as const) {
-    if (SAVED[k] === undefined) delete process.env[k];
-    else (process.env as Record<string, string | undefined>)[k] = SAVED[k];
+  __setMailTransportForTests(undefined);
+  for (const key of EMAIL_KEYS) {
+    if (SAVED[key] === undefined) delete process.env[key];
+    else (process.env as Record<string, string | undefined>)[key] = SAVED[key];
   }
 });
 
-describe("gmail configuration", () => {
-  it("reports unconfigured without credentials", () => {
-    expect(isGmailConfigured()).toBe(false);
+describe("transport selection", () => {
+  it("reports unconfigured with no credentials", () => {
+    expect(isEmailConfigured()).toBe(false);
+    expect(getEmailMode()).toBe("log-only");
   });
 
-  it("uses the log-only adapter when Gmail is not configured", async () => {
+  it("prefers Gmail SMTP, which needs no domain", () => {
+    smtpEnv();
+    expect(isEmailConfigured()).toBe(true);
+    expect(getEmailMode()).toBe("smtp");
+  });
+
+  it("refuses a sender address that is not the authenticated Gmail account", () => {
+    smtpEnv();
+    process.env.AGENCY_EMAIL = "someone@example.com";
+    expect(getEmailMode()).toBe("log-only");
+  });
+
+  it("falls back to Resend when a verified domain is configured instead", () => {
+    resendEnv();
+    expect(isEmailConfigured()).toBe(true);
+    expect(getEmailMode()).toBe("resend");
+  });
+
+  it("uses SMTP when both transports are configured", () => {
+    smtpEnv();
+    process.env.RESEND_API_KEY = "re_test_stub";
+    expect(getEmailMode()).toBe("smtp");
+  });
+});
+
+describe("log-only and misconfiguration", () => {
+  it("logs instead of sending in development and says so", async () => {
     const r = await sendEmail({
       to: "team@example.com",
       subject: "hello",
@@ -59,6 +109,7 @@ describe("gmail configuration", () => {
     });
     expect(r.ok).toBe(true);
     expect(r.messageId).toMatch(/^log-/);
+    expect(r.mode).toBe("log-only");
   });
 
   it("fails closed in production instead of pretending a log-only send succeeded", async () => {
@@ -74,34 +125,88 @@ describe("gmail configuration", () => {
   });
 });
 
-describe("mocked smtp transport", () => {
-  it("submits through the configured transport and returns its message id", async () => {
-    gmailEnv();
-    __setEmailTransportForTests({
-      sendMail: async (opts) => {
-        expect(opts.from).toBe("studio@example.com");
-        expect(opts.to).toEqual(["team@example.com"]);
-        expect(opts.text).toContain("hello");
-        return { messageId: "gmail-123" };
-      },
-    });
+describe("payload built for the provider", () => {
+  it("sends through SMTP with a plain-text alternative", async () => {
+    smtpEnv();
+    const seen = captureTransport();
     const r = await sendEmail({
       to: "team@example.com",
       subject: "hello",
-      html: "<p>hello</p>",
+      html: "<p>hello</p><p>world</p>",
       type: "team_new_enquiry",
     });
-    expect(r).toMatchObject({ ok: true, messageId: "gmail-123", mode: "smtp" });
+    expect(r).toMatchObject({ ok: true, messageId: "provider-id", mode: "smtp" });
+    expect(seen[0].mode).toBe("smtp");
+    expect(seen[0].payload.from).toBe("studio.owner@gmail.com");
+    expect(seen[0].payload.to).toEqual(["team@example.com"]);
+    expect(seen[0].payload.text).toBe("hello\nworld");
   });
 
-  it("rejects invalid recipients without touching smtp", async () => {
-    gmailEnv();
+  it("normalises the app password Gmail displays with spaces", async () => {
+    smtpEnv();
+    process.env.GMAIL_APP_PASSWORD = "abcd efgh ijkl mnop";
+    expect(getEmailMode()).toBe("smtp");
+  });
+
+  it("adds the display name, reply-to, BCC and multiple recipients", async () => {
+    smtpEnv();
+    process.env.AGENCY_EMAIL_NAME = "Metaract Studio";
+    process.env.AGENCY_REPLY_TO = "hello@example.com";
+    process.env.AGENCY_BCC_EMAIL =
+      "archive1@example.com; archive2@example.com";
+    const seen = captureTransport();
+    await sendEmail({
+      to: "founder1@example.com, founder2@example.com",
+      subject: "x",
+      html: "<p>x</p>",
+      type: "team_new_enquiry",
+    });
+    expect(seen[0].payload.from).toBe('"Metaract Studio" <studio.owner@gmail.com>');
+    expect(seen[0].payload.to).toEqual([
+      "founder1@example.com",
+      "founder2@example.com",
+    ]);
+    expect(seen[0].payload.replyTo).toBe("hello@example.com");
+    expect(seen[0].payload.bcc).toEqual([
+      "archive1@example.com",
+      "archive2@example.com",
+    ]);
+  });
+
+  it("turns the outbox job id into a stable Message-ID so a retry cannot duplicate", async () => {
+    smtpEnv();
+    const seen = captureTransport();
+    await sendEmail({
+      to: "team@example.com",
+      subject: "x",
+      html: "<p>x</p>",
+      type: "team_new_enquiry",
+      idempotencyKey: "job-1",
+    });
+    expect(seen[0].payload.messageId).toBe("<job-1@gmail.com>");
+    expect(seen[0].key).toBe("job-1");
+  });
+
+  it("omits the Message-ID when there is no job id", async () => {
+    smtpEnv();
+    const seen = captureTransport();
+    await sendEmail({
+      to: "team@example.com",
+      subject: "x",
+      html: "<p>x</p>",
+      type: "delivery_test",
+    });
+    expect(seen[0].payload.messageId).toBeUndefined();
+  });
+});
+
+describe("recipient validation", () => {
+  it("rejects an invalid recipient without touching the provider", async () => {
+    smtpEnv();
     let called = false;
-    __setEmailTransportForTests({
-      sendMail: async () => {
-        called = true;
-        return {};
-      },
+    __setMailTransportForTests(async (_p, mode) => {
+      called = true;
+      return { ok: true, messageId: "should-not-happen", mode };
     });
     const r = await sendEmail({
       to: "not-an-email",
@@ -114,31 +219,12 @@ describe("mocked smtp transport", () => {
     expect(called).toBe(false);
   });
 
-  it("supports multiple founder recipients in one team alert", async () => {
-    gmailEnv();
-    __setEmailTransportForTests({
-      sendMail: async (opts) => {
-        expect(opts.to).toEqual(["founder1@example.com", "founder2@example.com"]);
-        return { messageId: "gmail-multi" };
-      },
-    });
-    const r = await sendEmail({
-      to: "founder1@example.com, founder2@example.com",
-      subject: "x",
-      html: "<p>x</p>",
-      type: "team_new_enquiry",
-    });
-    expect(r).toMatchObject({ ok: true, messageId: "gmail-multi", mode: "smtp" });
-  });
-
-  it("rejects a recipient list if any address is invalid", async () => {
-    gmailEnv();
+  it("rejects a list when any address is invalid", async () => {
+    smtpEnv();
     let called = false;
-    __setEmailTransportForTests({
-      sendMail: async () => {
-        called = true;
-        return {};
-      },
+    __setMailTransportForTests(async (_p, mode) => {
+      called = true;
+      return { ok: true, messageId: "should-not-happen", mode };
     });
     const r = await sendEmail({
       to: "founder1@example.com, broken-address",
@@ -146,44 +232,77 @@ describe("mocked smtp transport", () => {
       html: "<p>x</p>",
       type: "team_new_enquiry",
     });
-    expect(r.ok).toBe(false);
     expect(r.errorCode).toBe("invalid_recipient");
     expect(called).toBe(false);
   });
 
-  it("maps auth failures without leaking details", async () => {
-    gmailEnv();
-    __setEmailTransportForTests({
-      sendMail: async () => {
-        throw Object.assign(new Error("Invalid credentials (Failure)"), {
-          code: "EAUTH",
-        });
-      },
+  it("rejects more than 50 recipients before calling the provider", async () => {
+    smtpEnv();
+    let called = false;
+    __setMailTransportForTests(async (_p, mode) => {
+      called = true;
+      return { ok: true, messageId: "should-not-happen", mode };
     });
     const r = await sendEmail({
-      to: "team@example.com",
+      to: Array.from({ length: 51 }, (_, i) => `person${i}@example.com`).join(
+        ","
+      ),
       subject: "x",
       html: "<p>x</p>",
       type: "team_new_enquiry",
     });
-    expect(r.ok).toBe(false);
-    expect(r.errorCode).toBe("auth_failed");
+    expect(r.errorCode).toBe("invalid_recipient");
+    expect(called).toBe(false);
+  });
+});
+
+describe("SMTP error classification", () => {
+  it("maps bad credentials to auth_failed", () => {
+    expect(classifySmtpError({ code: "EAUTH", responseCode: 535 })).toBe(
+      "auth_failed"
+    );
   });
 
-  it("maps timeouts as transient failures", async () => {
-    gmailEnv();
-    __setEmailTransportForTests({
-      sendMail: async () => {
-        throw Object.assign(new Error("Connection timeout"), { code: "ETIMEDOUT" });
-      },
-    });
+  it("maps a rejected recipient to invalid_recipient", () => {
+    expect(
+      classifySmtpError({ code: "EENVELOPE", responseCode: 550, response: "550 5.1.1 user unknown" })
+    ).toBe("invalid_recipient");
+  });
+
+  it("maps a sending limit to a transient failure", () => {
+    expect(
+      classifySmtpError({
+        responseCode: 550,
+        response: "550 5.4.5 Daily user sending limit exceeded",
+      })
+    ).toBe("transient_failure");
+  });
+
+  it("maps connection problems to a transient failure", () => {
+    expect(classifySmtpError({ code: "ETIMEDOUT" })).toBe("transient_failure");
+    expect(classifySmtpError({ code: "ESOCKET" })).toBe("transient_failure");
+    expect(classifySmtpError({ responseCode: 421 })).toBe("transient_failure");
+  });
+
+  it("falls back to provider_error", () => {
+    expect(classifySmtpError(new Error("odd"))).toBe("provider_error");
+  });
+
+  it("propagates a transport failure with its mode and code", async () => {
+    smtpEnv();
+    __setMailTransportForTests(async () => ({
+      ok: false,
+      errorCode: "auth_failed",
+      mode: "smtp",
+      detail: "EAuth smtp=535",
+    }));
     const r = await sendEmail({
       to: "team@example.com",
       subject: "x",
       html: "<p>x</p>",
       type: "team_new_enquiry",
     });
-    expect(r.errorCode).toBe("transient_failure");
+    expect(r).toMatchObject({ ok: false, errorCode: "auth_failed", mode: "smtp" });
   });
 });
 
@@ -203,10 +322,26 @@ describe("templates", () => {
     expect(html).toContain("&amp;");
   });
 
-  it("customer receipt keeps the reference and contact", () => {
+  it("customer receipt keeps the reference and public contact", () => {
     const html = customerReceiptHtml("REQ-2026-000001", "team@studio.example");
     expect(html).toContain("REQ-2026-000001");
     expect(html).toContain("team@studio.example");
+  });
+
+  it("builds the same customer receipt content used by send and retry", () => {
+    const content = notificationEmail({
+      type: "customer_receipt",
+      referenceNumber: "REQ-2026-000001",
+      serviceTitle: "Websites",
+      projectTitle: "A project",
+      adminUrl: "https://admin.example/enquiries/1",
+      contactEmail: "hello@studio.example",
+    });
+    expect(content.subject).toBe(
+      "We received your project enquiry — REQ-2026-000001"
+    );
+    expect(content.html).toContain("hello@studio.example");
+    expect(content.html).not.toContain("founder1@example.com");
   });
 
   it("generates a plain-text alternative", () => {

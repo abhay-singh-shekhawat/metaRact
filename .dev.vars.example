@@ -37,15 +37,18 @@ UPSTASH_REDIS_REST_URL=
 UPSTASH_REDIS_REST_TOKEN=
 
 # --- Email -------------------------------------------------------------------
-# Leave GMAIL_USER blank to use log-only mode in local development. Production
-# treats missing email configuration as a failed notification, not a fake send.
-# GMAIL_USER is the authenticated SMTP account; AGENCY_EMAIL is the visible
-# From address and must be that mailbox or a verified Gmail "Send as" alias.
+# Gmail SMTP is the free transport and needs no domain: set GMAIL_USER to the
+# Gmail account, GMAIL_APP_PASSWORD to its 16-character App Password, and
+# AGENCY_EMAIL to that same address. Leave both blank to use log-only mode in
+# local development. Production treats missing email configuration as a failed
+# notification, not a fake send. RESEND_API_KEY is an optional alternative that
+# requires a sender on a domain verified in Resend.
 GMAIL_USER=
 GMAIL_APP_PASSWORD=
-AGENCY_EMAIL=team@example.com
+RESEND_API_KEY=
+AGENCY_EMAIL=
 AGENCY_EMAIL_NAME=Metaract Studio
-AGENCY_REPLY_TO=team@example.com
+AGENCY_REPLY_TO=
 # One address or a comma-separated list of founder/team inboxes.
 AGENCY_NOTIFICATION_EMAIL=team@example.com
 AGENCY_BCC_EMAIL=

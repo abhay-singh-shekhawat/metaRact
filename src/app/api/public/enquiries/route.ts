@@ -166,7 +166,6 @@ export async function POST(req: Request) {
           received: true,
           duplicate: result.duplicate ?? false,
           emailMode: "emailMode" in result ? result.emailMode : undefined,
-          notifications: "notifications" in result ? result.notifications : undefined,
         },
         requestId: rid,
       },
